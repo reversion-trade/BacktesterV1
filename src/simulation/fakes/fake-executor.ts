@@ -173,11 +173,17 @@ export class FakeExecutor implements IExecutor {
     }
 
     // Calculate fee
-    const feeUSD = amountUSD * (this.config.feeBps / 10000);
+    let feeUSD = amountUSD * (this.config.feeBps / 10000);
 
-    // Check if we have enough capital for buys
+    // Check if we have enough capital for buys - auto-adjust to fit
     if (order.side === "BUY" && amountUSD + feeUSD > this.capitalUSD) {
-      return this.createRejectedResult(order, "Insufficient capital");
+      // Auto-adjust order size to fit within available capital (including fees)
+      // totalNeeded = amountUSD + fee = amountUSD * (1 + feeBps/10000)
+      // amountUSD = capitalUSD / (1 + feeBps/10000)
+      const adjustedAmountUSD = this.capitalUSD / (1 + this.config.feeBps / 10000);
+      amountUSD = adjustedAmountUSD;
+      amountAsset = amountUSD / fillPrice;
+      feeUSD = amountUSD * (this.config.feeBps / 10000);
     }
 
     // Calculate slippage in USD
@@ -197,7 +203,9 @@ export class FakeExecutor implements IExecutor {
         amountAsset,
         fillPrice,
         feeUSD,
-        slippageUSD
+        slippageUSD,
+        order.isEntry,
+        order.tradeDirection
       );
 
       // Update or create position
@@ -212,6 +220,13 @@ export class FakeExecutor implements IExecutor {
           sizeUSD: totalSizeUSD,
           entryPrice: avgPrice,
         };
+      } else if (this.position && this.position.direction === "SHORT") {
+        // Closing short position (buying back what was sold)
+        this.position.size -= amountAsset;
+        this.position.sizeUSD -= amountUSD;
+        if (this.position.size <= 0) {
+          this.position = null;
+        }
       } else if (!this.position) {
         // New long position
         this.position = {
@@ -235,7 +250,9 @@ export class FakeExecutor implements IExecutor {
           amountUSD - feeUSD,
           fillPrice,
           feeUSD,
-          slippageUSD
+          slippageUSD,
+          order.isEntry,
+          order.tradeDirection
         );
 
         // Update position
@@ -254,7 +271,9 @@ export class FakeExecutor implements IExecutor {
           amountUSD - feeUSD,
           fillPrice,
           feeUSD,
-          slippageUSD
+          slippageUSD,
+          order.isEntry,
+          order.tradeDirection
         );
 
         if (!this.position) {
@@ -341,7 +360,9 @@ export class FakeExecutor implements IExecutor {
     toAmount: number,
     price: number,
     feeUSD: number,
-    slippageUSD: number
+    slippageUSD: number,
+    isEntry?: boolean,
+    tradeDirection?: Direction
   ): void {
     const swap: SwapEvent = {
       id: `swap-${++this.swapIdCounter}`,
@@ -354,6 +375,8 @@ export class FakeExecutor implements IExecutor {
       price,
       feeUSD,
       slippageUSD,
+      isEntry,
+      tradeDirection,
     };
     this.swapEvents.push(swap);
   }

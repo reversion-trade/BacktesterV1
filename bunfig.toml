@@ -1,0 +1,4 @@
+[test]
+# Default test timeout in milliseconds
+# Increased for integration tests that process large datasets
+timeout = 30000

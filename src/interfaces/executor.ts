@@ -45,6 +45,10 @@ export interface OrderRequest {
   limitPrice?: number;
   /** Time-in-force (optional) */
   timeInForce?: "GTC" | "IOC" | "FOK";
+  /** Whether this order is opening (entry) or closing (exit) a position */
+  isEntry?: boolean;
+  /** Direction of the position being opened or closed */
+  tradeDirection?: Direction;
 }
 
 /**

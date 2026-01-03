@@ -66,6 +66,10 @@ export interface SwapEvent {
   feeUSD: number;
   /** Slippage incurred in USD */
   slippageUSD: number;
+  /** Whether this swap is opening a position (entry) or closing (exit) */
+  isEntry?: boolean;
+  /** Direction of the trade this swap belongs to (LONG or SHORT) */
+  tradeDirection?: Direction;
 }
 
 /**

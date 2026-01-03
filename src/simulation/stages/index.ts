@@ -295,8 +295,11 @@ export async function runBacktestPipeline(
   );
 
   // Extract events from FakeDatabase and FakeExecutor
+  // AlgoEvents are logged to the database by AlgoRunner
   const algoEvents = await env.database.getAlgoEvents();
-  const swapEvents = await env.database.getSwapEvents();
+  // SwapEvents are created by FakeExecutor during order execution (not stored in database)
+  // We need to cast to access the backtest-specific getSwapEvents() method
+  const swapEvents = (env.executor as import("../fakes/fake-executor.ts").FakeExecutor).getSwapEvents();
 
   // Build TradeEvents from SwapEvents (pair entry/exit)
   const trades = buildTradeEventsFromSwaps(swapEvents, initResult.symbol);
@@ -326,7 +329,8 @@ export async function runBacktestPipeline(
 
 /**
  * Build TradeEvents from paired SwapEvents.
- * Entry swaps (USD → Asset) are paired with exit swaps (Asset → USD).
+ * Uses isEntry and tradeDirection fields for correct pairing (handles both LONG and SHORT).
+ * Falls back to old logic (USD → Asset = entry) if fields are not set.
  */
 function buildTradeEventsFromSwaps(
   swapEvents: import("../../events/types.ts").SwapEvent[],
@@ -337,16 +341,37 @@ function buildTradeEventsFromSwaps(
   let tradeId = 1;
 
   for (const swap of swapEvents) {
-    if (swap.fromAsset === "USD") {
-      // Entry swap (USD → Asset)
-      currentEntrySwap = swap;
-    } else if (swap.toAsset === "USD" && currentEntrySwap) {
-      // Exit swap (Asset → USD)
-      const direction: import("../../core/types.ts").Direction =
-        swap.fromAsset === symbol ? "LONG" : "SHORT";
+    // Use isEntry field if available, otherwise fall back to fromAsset check
+    const isEntry = swap.isEntry ?? (swap.fromAsset === "USD");
 
-      const pnlUSD = swap.toAmount - currentEntrySwap.fromAmount;
-      const pnlPct = pnlUSD / currentEntrySwap.fromAmount;
+    if (isEntry) {
+      // Entry swap
+      currentEntrySwap = swap;
+    } else if (currentEntrySwap) {
+      // Exit swap - pair with current entry
+      const direction = swap.tradeDirection ?? (swap.fromAsset === symbol ? "LONG" : "SHORT");
+
+      // P&L calculation depends on direction:
+      // LONG: Entry spends USD to buy asset, Exit sells asset for USD
+      //       P&L = exitUSD - entryUSD
+      // SHORT: Entry sells asset for USD, Exit spends USD to buy back asset
+      //       P&L = entryUSD - exitUSD
+      let pnlUSD: number;
+      let entryUSD: number;
+
+      if (direction === "LONG") {
+        // Entry: USD → Asset (fromAmount is USD spent)
+        // Exit: Asset → USD (toAmount is USD received)
+        entryUSD = currentEntrySwap.fromAmount;
+        pnlUSD = swap.toAmount - entryUSD;
+      } else {
+        // SHORT - Entry: Asset → USD (toAmount is USD received)
+        // SHORT - Exit: USD → Asset (fromAmount is USD spent)
+        entryUSD = currentEntrySwap.toAmount;
+        pnlUSD = entryUSD - swap.fromAmount;
+      }
+
+      const pnlPct = pnlUSD / entryUSD;
       const durationBars = swap.barIndex - currentEntrySwap.barIndex;
       const durationSeconds = swap.timestamp - currentEntrySwap.timestamp;
 

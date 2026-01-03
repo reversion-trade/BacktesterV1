@@ -193,9 +193,12 @@ export function buildIndicatorInfoMap(
 
     for (const config of condition.required) {
       const indicator = makeIndicator(config);
-      const key = indicator.getCacheKey();
-      infoMap.set(key, {
-        indicatorKey: key,
+      const indicatorKey = indicator.getCacheKey();
+      // Use composite key: conditionType + indicatorKey
+      // This allows the same indicator to be used for multiple conditions
+      const mapKey = `${conditionType}:${indicatorKey}`;
+      infoMap.set(mapKey, {
+        indicatorKey,
         indicatorType: config.type,
         conditionType,
         isRequired: true,
@@ -204,9 +207,11 @@ export function buildIndicatorInfoMap(
 
     for (const config of condition.optional) {
       const indicator = makeIndicator(config);
-      const key = indicator.getCacheKey();
-      infoMap.set(key, {
-        indicatorKey: key,
+      const indicatorKey = indicator.getCacheKey();
+      // Use composite key: conditionType + indicatorKey
+      const mapKey = `${conditionType}:${indicatorKey}`;
+      infoMap.set(mapKey, {
+        indicatorKey,
         indicatorType: config.type,
         conditionType,
         isRequired: false,

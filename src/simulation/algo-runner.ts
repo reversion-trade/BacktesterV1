@@ -36,6 +36,11 @@ import type {
   StateTransitionEvent,
   ConditionChangeEvent,
 } from "../events/types.ts";
+import {
+  StopLossIndicator,
+  TakeProfitIndicator,
+  TrailingStopIndicator,
+} from "./special-indicators/index.ts";
 
 // =============================================================================
 // TYPES
@@ -82,6 +87,14 @@ interface AlgoState {
   positionState: PositionState;
   tradeCount: number;
   currentBarIndex: number;
+  /** Active stop loss indicator (created on entry) */
+  stopLoss: StopLossIndicator | null;
+  /** Active take profit indicator (created on entry) */
+  takeProfit: TakeProfitIndicator | null;
+  /** Active trailing stop indicator (created on entry) */
+  trailingStop: TrailingStopIndicator | null;
+  /** Entry price of current position */
+  entryPrice: number;
 }
 
 // =============================================================================
@@ -147,6 +160,10 @@ export class AlgoRunner {
       positionState: "FLAT",
       tradeCount: 0,
       currentBarIndex: 0,
+      stopLoss: null,
+      takeProfit: null,
+      trailingStop: null,
+      entryPrice: 0,
     };
   }
 
@@ -179,6 +196,10 @@ export class AlgoRunner {
       const exitResult = await this.checkExit(candle, barIndex);
       if (exitResult) {
         exitOccurred = true;
+        // Reset execution price to candle.close after exit (in case of re-entry)
+        if ("setCurrentPrice" in this.executor) {
+          (this.executor as { setCurrentPrice: (p: number) => void }).setCurrentPrice(candle.close);
+        }
       }
     }
 
@@ -218,6 +239,7 @@ export class AlgoRunner {
     }
 
     // Place closing order
+    const positionDirection = this.state.positionState as Direction;
     const side = this.state.positionState === "LONG" ? "SELL" : "BUY";
     await this.executor.placeOrder({
       clientOrderId: `close-${barIndex}`,
@@ -225,6 +247,8 @@ export class AlgoRunner {
       side,
       type: "MARKET",
       amountAsset: position.size,
+      isEntry: false,
+      tradeDirection: positionDirection,
     });
 
     // Log state transition
@@ -264,6 +288,10 @@ export class AlgoRunner {
       positionState: "FLAT",
       tradeCount: 0,
       currentBarIndex: 0,
+      stopLoss: null,
+      takeProfit: null,
+      trailingStop: null,
+      entryPrice: 0,
     };
   }
 
@@ -302,6 +330,55 @@ export class AlgoRunner {
   }
 
   private async checkExit(candle: Candle, barIndex: number): Promise<boolean> {
+    // Get OHLC prices for special indicator checks
+    const prices = [candle.open, candle.high, candle.low, candle.close];
+    const times = [candle.bucket, candle.bucket, candle.bucket, candle.bucket];
+
+    // Check special indicators first (SL/TP/Trailing have priority)
+    let slTriggered = false;
+    let tpTriggered = false;
+    let trailingTriggered = false;
+
+    // Check trailing stop first (highest priority as it can adjust)
+    if (this.state.trailingStop) {
+      this.state.trailingStop.calculate(prices, times);
+      trailingTriggered = this.state.trailingStop.isTriggered();
+    }
+
+    // Check stop loss
+    if (this.state.stopLoss && !trailingTriggered) {
+      this.state.stopLoss.calculate(prices, times);
+      slTriggered = this.state.stopLoss.isTriggered();
+    }
+
+    // Check take profit
+    if (this.state.takeProfit && !trailingTriggered && !slTriggered) {
+      this.state.takeProfit.calculate(prices, times);
+      tpTriggered = this.state.takeProfit.isTriggered();
+    }
+
+    // Exit on special indicator triggers (priority: trailing > SL > TP)
+    // Use the SL/TP LEVEL for execution (not the trigger price which may be worse)
+    if (trailingTriggered) {
+      // Trailing stop uses the current trailing level
+      const exitPrice = this.state.trailingStop?.getCurrentLevel();
+      await this.exitPosition(candle, barIndex, "TRAILING_STOP", exitPrice);
+      return true;
+    }
+    if (slTriggered) {
+      // Execute at the stop loss level (realistic simulation)
+      const exitPrice = this.state.stopLoss?.getStopLossPrice();
+      await this.exitPosition(candle, barIndex, "STOP_LOSS", exitPrice);
+      return true;
+    }
+    if (tpTriggered) {
+      // Execute at the take profit level
+      const exitPrice = this.state.takeProfit?.getTakeProfitPrice();
+      await this.exitPosition(candle, barIndex, "TAKE_PROFIT", exitPrice);
+      return true;
+    }
+
+    // Check indicator-based exit signal
     const exitConditionType: ConditionType =
       this.state.positionState === "LONG" ? "LONG_EXIT" : "SHORT_EXIT";
 
@@ -311,9 +388,6 @@ export class AlgoRunner {
       await this.exitPosition(candle, barIndex, "EXIT_SIGNAL");
       return true;
     }
-
-    // TODO: Check stop loss, take profit, trailing stop
-    // These would be handled by checking special indicator states
 
     return false;
   }
@@ -347,12 +421,44 @@ export class AlgoRunner {
       side,
       type: "MARKET",
       amountUSD: positionSizeUSD,
+      isEntry: true,
+      tradeDirection: direction,
     });
 
     // Update state
     const newState: PositionState = direction === "LONG" ? "LONG" : "SHORT";
     await this.logStateTransition(barIndex, candle.bucket, "FLAT", newState, "ENTRY_SIGNAL");
     this.state.positionState = newState;
+    this.state.entryPrice = candle.close;
+
+    // Create special indicators based on exit config
+    const exitConfig = direction === "LONG"
+      ? this.config.algoParams.longExit
+      : this.config.algoParams.shortExit;
+
+    if (exitConfig?.stopLoss) {
+      this.state.stopLoss = new StopLossIndicator({
+        direction,
+        stopLoss: exitConfig.stopLoss,
+      });
+      this.state.stopLoss.reset(candle.close, candle.bucket);
+    }
+
+    if (exitConfig?.takeProfit) {
+      this.state.takeProfit = new TakeProfitIndicator({
+        direction,
+        takeProfit: exitConfig.takeProfit,
+      });
+      this.state.takeProfit.reset(candle.close, candle.bucket);
+    }
+
+    if (exitConfig?.trailingStop) {
+      this.state.trailingStop = new TrailingStopIndicator({
+        direction,
+        trailingStop: exitConfig.trailingStop,
+      });
+      this.state.trailingStop.reset(candle.close, candle.bucket);
+    }
 
     // Log condition change
     const conditionType: ConditionType = direction === "LONG" ? "LONG_ENTRY" : "SHORT_ENTRY";
@@ -362,7 +468,8 @@ export class AlgoRunner {
   private async exitPosition(
     candle: Candle,
     barIndex: number,
-    reason: "EXIT_SIGNAL" | "STOP_LOSS" | "TAKE_PROFIT" | "TRAILING_STOP"
+    reason: "EXIT_SIGNAL" | "STOP_LOSS" | "TAKE_PROFIT" | "TRAILING_STOP",
+    triggerPrice?: number
   ): Promise<void> {
     // Get current position
     const position = await this.executor.getPosition(this.config.symbol);
@@ -370,7 +477,13 @@ export class AlgoRunner {
       return;
     }
 
+    // Set execution price to trigger price if available (for accurate SL/TP execution)
+    if (triggerPrice && "setCurrentPrice" in this.executor) {
+      (this.executor as { setCurrentPrice: (p: number) => void }).setCurrentPrice(triggerPrice);
+    }
+
     // Place closing order
+    const positionDirection = this.state.positionState as Direction;
     const side = this.state.positionState === "LONG" ? "SELL" : "BUY";
     await this.executor.placeOrder({
       clientOrderId: `exit-${barIndex}`,
@@ -378,6 +491,8 @@ export class AlgoRunner {
       side,
       type: "MARKET",
       amountAsset: position.size,
+      isEntry: false,
+      tradeDirection: positionDirection,
     });
 
     // Log state transition
@@ -397,6 +512,12 @@ export class AlgoRunner {
     // Update state
     this.state.positionState = "FLAT";
     this.state.tradeCount++;
+
+    // Clear special indicators
+    this.state.stopLoss = null;
+    this.state.takeProfit = null;
+    this.state.trailingStop = null;
+    this.state.entryPrice = 0;
   }
 
   private calculatePositionSize(): number {

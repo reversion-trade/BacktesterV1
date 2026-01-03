@@ -196,14 +196,23 @@ export class TrailingStopIndicator extends BaseSpecialIndicator<
 
   /**
    * Calculate the stop level from a reference price.
+   * For REL type, offset is calculated as percentage of the reference (extreme) price.
+   * For ABS type, offset is a fixed dollar amount.
    */
   private calculateStopLevel(referencePrice: number): number {
+    // For REL type, recalculate offset as percentage of current extreme
+    // For ABS type, use the fixed offset from entry
+    let effectiveOffset = this.offset;
+    if (this.config.trailingOffset.type === "REL") {
+      effectiveOffset = referencePrice * this.config.trailingOffset.value;
+    }
+
     if (this.config.direction === "LONG") {
       // LONG: SL is below the reference price
-      return referencePrice - this.offset;
+      return referencePrice - effectiveOffset;
     } else {
       // SHORT: SL is above the reference price
-      return referencePrice + this.offset;
+      return referencePrice + effectiveOffset;
     }
   }
 
