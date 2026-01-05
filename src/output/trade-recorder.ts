@@ -19,45 +19,45 @@ import { BalanceIndicator } from "../simulation/special-indicators/balance.ts";
  * Created when entering a trade.
  */
 export interface OpenPosition {
-  /** Trade ID (sequential) */
-  tradeId: number;
-  /** Trade direction */
-  direction: Direction;
-  /** Entry timestamp (Unix seconds) */
-  entryTime: number;
-  /** Entry price (before slippage) */
-  entryPrice: number;
-  /** Effective entry price (after slippage) */
-  effectiveEntryPrice: number;
-  /** Position size in asset units */
-  qty: number;
-  /** Position size in USD */
-  positionSizeUSD: number;
-  /** Entry bar index */
-  entryBarIndex: number;
-  /** Stop loss price level (if set) */
-  stopLossPrice?: number;
-  /** Take profit price level (if set) */
-  takeProfitPrice?: number;
-  /** Balance indicator for tracking P&L */
-  balanceIndicator: BalanceIndicator;
+    /** Trade ID (sequential) */
+    tradeId: number;
+    /** Trade direction */
+    direction: Direction;
+    /** Entry timestamp (Unix seconds) */
+    entryTime: number;
+    /** Entry price (before slippage) */
+    entryPrice: number;
+    /** Effective entry price (after slippage) */
+    effectiveEntryPrice: number;
+    /** Position size in asset units */
+    qty: number;
+    /** Position size in USD */
+    positionSizeUSD: number;
+    /** Entry bar index */
+    entryBarIndex: number;
+    /** Stop loss price level (if set) */
+    stopLossPrice?: number;
+    /** Take profit price level (if set) */
+    takeProfitPrice?: number;
+    /** Balance indicator for tracking P&L */
+    balanceIndicator: BalanceIndicator;
 }
 
 /**
  * Configuration for opening a position.
  */
 export interface OpenPositionConfig {
-  tradeId: number;
-  direction: Direction;
-  entryTime: number;
-  entryPrice: number;
-  entryBarIndex: number;
-  initialCapital: number;
-  positionSize: ValueConfig;
-  feeBps: number;
-  slippageBps: number;
-  stopLossPrice?: number;
-  takeProfitPrice?: number;
+    tradeId: number;
+    direction: Direction;
+    entryTime: number;
+    entryPrice: number;
+    entryBarIndex: number;
+    initialCapital: number;
+    positionSize: ValueConfig;
+    feeBps: number;
+    slippageBps: number;
+    stopLossPrice?: number;
+    takeProfitPrice?: number;
 }
 
 /**
@@ -67,31 +67,31 @@ export interface OpenPositionConfig {
  * @returns Open position record with balance indicator
  */
 export function openPosition(config: OpenPositionConfig): OpenPosition {
-  // Create balance indicator for this trade
-  const balanceIndicator = new BalanceIndicator({
-    direction: config.direction,
-    initialCapital: config.initialCapital,
-    positionSize: config.positionSize,
-    feeBps: config.feeBps,
-    slippageBps: config.slippageBps,
-  });
+    // Create balance indicator for this trade
+    const balanceIndicator = new BalanceIndicator({
+        direction: config.direction,
+        initialCapital: config.initialCapital,
+        positionSize: config.positionSize,
+        feeBps: config.feeBps,
+        slippageBps: config.slippageBps,
+    });
 
-  // Reset the indicator with entry price
-  balanceIndicator.reset(config.entryPrice, config.entryTime);
+    // Reset the indicator with entry price
+    balanceIndicator.reset(config.entryPrice, config.entryTime);
 
-  return {
-    tradeId: config.tradeId,
-    direction: config.direction,
-    entryTime: config.entryTime,
-    entryPrice: config.entryPrice,
-    effectiveEntryPrice: balanceIndicator.getEffectiveEntryPrice(),
-    qty: balanceIndicator.getPositionSizeAsset(),
-    positionSizeUSD: balanceIndicator.getPositionSizeUSD(),
-    entryBarIndex: config.entryBarIndex,
-    stopLossPrice: config.stopLossPrice,
-    takeProfitPrice: config.takeProfitPrice,
-    balanceIndicator,
-  };
+    return {
+        tradeId: config.tradeId,
+        direction: config.direction,
+        entryTime: config.entryTime,
+        entryPrice: config.entryPrice,
+        effectiveEntryPrice: balanceIndicator.getEffectiveEntryPrice(),
+        qty: balanceIndicator.getPositionSizeAsset(),
+        positionSizeUSD: balanceIndicator.getPositionSizeUSD(),
+        entryBarIndex: config.entryBarIndex,
+        stopLossPrice: config.stopLossPrice,
+        takeProfitPrice: config.takeProfitPrice,
+        balanceIndicator,
+    };
 }
 
 // =============================================================================
@@ -102,14 +102,14 @@ export function openPosition(config: OpenPositionConfig): OpenPosition {
  * Configuration for closing a position.
  */
 export interface ClosePositionConfig {
-  position: OpenPosition;
-  exitTime: number;
-  exitPrice: number;
-  exitBarIndex: number;
-  exitReason: ExitReason;
-  extremes: IntraTradeExtremes;
-  cumulativePnlBeforeTrade: number;
-  equityBeforeTrade: number;
+    position: OpenPosition;
+    exitTime: number;
+    exitPrice: number;
+    exitBarIndex: number;
+    exitReason: ExitReason;
+    extremes: IntraTradeExtremes;
+    cumulativePnlBeforeTrade: number;
+    equityBeforeTrade: number;
 }
 
 /**
@@ -119,59 +119,58 @@ export interface ClosePositionConfig {
  * @returns Complete trade record
  */
 export function closePosition(config: ClosePositionConfig): TradeRecord {
-  const { position, exitTime, exitPrice, exitBarIndex, exitReason, extremes } =
-    config;
+    const { position, exitTime, exitPrice, exitBarIndex, exitReason, extremes } = config;
 
-  // Calculate realized P&L using the balance indicator
-  const pnlUSD = position.balanceIndicator.calculateRealizedPnL(exitPrice);
-  const pnlPct = pnlUSD / position.positionSizeUSD;
+    // Calculate realized P&L using the balance indicator
+    const pnlUSD = position.balanceIndicator.calculateRealizedPnL(exitPrice);
+    const pnlPct = pnlUSD / position.positionSizeUSD;
 
-  // Calculate duration
-  const durationSeconds = exitTime - position.entryTime;
-  const durationBars = exitBarIndex - position.entryBarIndex;
+    // Calculate duration
+    const durationSeconds = exitTime - position.entryTime;
+    const durationBars = exitBarIndex - position.entryBarIndex;
 
-  // Calculate cumulative values
-  const cumulativePnlUSD = config.cumulativePnlBeforeTrade + pnlUSD;
-  const equityAfterTrade = config.equityBeforeTrade + pnlUSD;
+    // Calculate cumulative values
+    const cumulativePnlUSD = config.cumulativePnlBeforeTrade + pnlUSD;
+    const equityAfterTrade = config.equityBeforeTrade + pnlUSD;
 
-  return {
-    tradeId: position.tradeId,
-    direction: position.direction,
+    return {
+        tradeId: position.tradeId,
+        direction: position.direction,
 
-    // Entry
-    entryTime: position.entryTime,
-    entryPrice: position.entryPrice,
+        // Entry
+        entryTime: position.entryTime,
+        entryPrice: position.entryPrice,
 
-    // Exit
-    exitTime,
-    exitPrice,
+        // Exit
+        exitTime,
+        exitPrice,
 
-    // Size
-    qty: position.qty,
+        // Size
+        qty: position.qty,
 
-    // P&L
-    pnlUSD,
-    pnlPct,
+        // P&L
+        pnlUSD,
+        pnlPct,
 
-    // Intra-trade extremes
-    runUpUSD: extremes.maxRunUpUSD,
-    runUpPct: extremes.maxRunUpPct,
-    drawdownUSD: extremes.maxDrawdownUSD,
-    drawdownPct: extremes.maxDrawdownPct,
+        // Intra-trade extremes
+        runUpUSD: extremes.maxRunUpUSD,
+        runUpPct: extremes.maxRunUpPct,
+        drawdownUSD: extremes.maxDrawdownUSD,
+        drawdownPct: extremes.maxDrawdownPct,
 
-    // Duration
-    durationSeconds,
-    durationBars,
+        // Duration
+        durationSeconds,
+        durationBars,
 
-    // Cumulative
-    cumulativePnlUSD,
-    equityAfterTrade,
+        // Cumulative
+        cumulativePnlUSD,
+        equityAfterTrade,
 
-    // Exit info
-    exitReason,
-    stopLossPrice: position.stopLossPrice,
-    takeProfitPrice: position.takeProfitPrice,
-  };
+        // Exit info
+        exitReason,
+        stopLossPrice: position.stopLossPrice,
+        takeProfitPrice: position.takeProfitPrice,
+    };
 }
 
 // =============================================================================
@@ -182,69 +181,69 @@ export function closePosition(config: ClosePositionConfig): TradeRecord {
  * Accumulator for tracking trade sequence and cumulative values.
  */
 export class TradeAccumulator {
-  private trades: TradeRecord[] = [];
-  private cumulativePnl: number = 0;
-  private currentEquity: number;
-  private nextTradeId: number = 1;
+    private trades: TradeRecord[] = [];
+    private cumulativePnl: number = 0;
+    private currentEquity: number;
+    private nextTradeId: number = 1;
 
-  constructor(initialCapital: number) {
-    this.currentEquity = initialCapital;
-  }
+    constructor(initialCapital: number) {
+        this.currentEquity = initialCapital;
+    }
 
-  /**
-   * Get the next trade ID.
-   */
-  getNextTradeId(): number {
-    return this.nextTradeId;
-  }
+    /**
+     * Get the next trade ID.
+     */
+    getNextTradeId(): number {
+        return this.nextTradeId;
+    }
 
-  /**
-   * Record a completed trade.
-   */
-  recordTrade(trade: TradeRecord): void {
-    this.trades.push(trade);
-    this.cumulativePnl = trade.cumulativePnlUSD;
-    this.currentEquity = trade.equityAfterTrade;
-    this.nextTradeId++;
-  }
+    /**
+     * Record a completed trade.
+     */
+    recordTrade(trade: TradeRecord): void {
+        this.trades.push(trade);
+        this.cumulativePnl = trade.cumulativePnlUSD;
+        this.currentEquity = trade.equityAfterTrade;
+        this.nextTradeId++;
+    }
 
-  /**
-   * Get cumulative P&L before the current trade.
-   */
-  getCumulativePnl(): number {
-    return this.cumulativePnl;
-  }
+    /**
+     * Get cumulative P&L before the current trade.
+     */
+    getCumulativePnl(): number {
+        return this.cumulativePnl;
+    }
 
-  /**
-   * Get current equity before the current trade closes.
-   */
-  getCurrentEquity(): number {
-    return this.currentEquity;
-  }
+    /**
+     * Get current equity before the current trade closes.
+     */
+    getCurrentEquity(): number {
+        return this.currentEquity;
+    }
 
-  /**
-   * Get all recorded trades.
-   */
-  getTrades(): TradeRecord[] {
-    return this.trades;
-  }
+    /**
+     * Get all recorded trades.
+     */
+    getTrades(): TradeRecord[] {
+        return this.trades;
+    }
 
-  /**
-   * Get the number of completed trades.
-   */
-  getTradeCount(): number {
-    return this.trades.length;
-  }
+    /**
+     * Get the number of completed trades.
+     */
+    getTradeCount(): number {
+        return this.trades.length;
+    }
 
-  /**
-   * Reset the accumulator for a new backtest.
-   */
-  reset(initialCapital: number): void {
-    this.trades = [];
-    this.cumulativePnl = 0;
-    this.currentEquity = initialCapital;
-    this.nextTradeId = 1;
-  }
+    /**
+     * Reset the accumulator for a new backtest.
+     */
+    reset(initialCapital: number): void {
+        this.trades = [];
+        this.cumulativePnl = 0;
+        this.currentEquity = initialCapital;
+        this.nextTradeId = 1;
+    }
 }
 
 // =============================================================================
@@ -263,19 +262,19 @@ export class TradeAccumulator {
  * @returns The highest priority exit reason, or null if no exit
  */
 export function determineExitReason(
-  slTriggered: boolean,
-  trailingTriggered: boolean,
-  tpTriggered: boolean,
-  signalTriggered: boolean,
-  isLastCandle: boolean
+    slTriggered: boolean,
+    trailingTriggered: boolean,
+    tpTriggered: boolean,
+    signalTriggered: boolean,
+    isLastCandle: boolean
 ): ExitReason | null {
-  // Priority order: risk management first
-  if (trailingTriggered) return "TRAILING_STOP";
-  if (slTriggered) return "STOP_LOSS";
-  if (tpTriggered) return "TAKE_PROFIT";
-  if (signalTriggered) return "SIGNAL";
-  if (isLastCandle) return "END_OF_BACKTEST";
-  return null;
+    // Priority order: risk management first
+    if (trailingTriggered) return "TRAILING_STOP";
+    if (slTriggered) return "STOP_LOSS";
+    if (tpTriggered) return "TAKE_PROFIT";
+    if (signalTriggered) return "SIGNAL";
+    if (isLastCandle) return "END_OF_BACKTEST";
+    return null;
 }
 
 // =============================================================================
@@ -286,38 +285,35 @@ export function determineExitReason(
  * Check if a trade was a winner.
  */
 export function isWinningTrade(trade: TradeRecord): boolean {
-  return trade.pnlUSD > 0;
+    return trade.pnlUSD > 0;
 }
 
 /**
  * Check if a trade was a loser.
  */
 export function isLosingTrade(trade: TradeRecord): boolean {
-  return trade.pnlUSD < 0;
+    return trade.pnlUSD < 0;
 }
 
 /**
  * Filter trades by direction.
  */
-export function filterTradesByDirection(
-  trades: TradeRecord[],
-  direction: Direction
-): TradeRecord[] {
-  return trades.filter((t) => t.direction === direction);
+export function filterTradesByDirection(trades: TradeRecord[], direction: Direction): TradeRecord[] {
+    return trades.filter((t) => t.direction === direction);
 }
 
 /**
  * Calculate total P&L for a list of trades.
  */
 export function calculateTotalPnl(trades: TradeRecord[]): number {
-  return trades.reduce((sum, t) => sum + t.pnlUSD, 0);
+    return trades.reduce((sum, t) => sum + t.pnlUSD, 0);
 }
 
 /**
  * Calculate win rate for a list of trades.
  */
 export function calculateWinRate(trades: TradeRecord[]): number {
-  if (trades.length === 0) return 0;
-  const winners = trades.filter(isWinningTrade).length;
-  return winners / trades.length;
+    if (trades.length === 0) return 0;
+    const winners = trades.filter(isWinningTrade).length;
+    return winners / trades.length;
 }

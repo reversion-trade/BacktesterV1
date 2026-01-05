@@ -21,22 +21,18 @@ import type { EntryCondition, ExitCondition, IndicatorConfig } from "../core/typ
  * @param cache - Pre-calculated signals
  * @returns true if indicator is signaling
  */
-function isIndicatorSignaling(
-  config: IndicatorConfig,
-  candleIndex: number,
-  cache: SignalCache
-): boolean {
-  const indicator = makeIndicator(config);
-  const key = indicator.getCacheKey();
-  const signals = cache.get(key);
+function isIndicatorSignaling(config: IndicatorConfig, candleIndex: number, cache: SignalCache): boolean {
+    const indicator = makeIndicator(config);
+    const key = indicator.getCacheKey();
+    const signals = cache.get(key);
 
-  if (!signals) {
-    // Indicator wasn't calculated - shouldn't happen if setup is correct
-    console.warn(`Indicator not found in cache: ${key}`);
-    return false;
-  }
+    if (!signals) {
+        // Indicator wasn't calculated - shouldn't happen if setup is correct
+        console.warn(`Indicator not found in cache: ${key}`);
+        return false;
+    }
 
-  return signals[candleIndex] ?? false;
+    return signals[candleIndex] ?? false;
 }
 
 /**
@@ -53,31 +49,31 @@ function isIndicatorSignaling(
  * @returns true if condition is met
  */
 export function evaluateCondition(
-  condition: EntryCondition | ExitCondition,
-  candleIndex: number,
-  cache: SignalCache
+    condition: EntryCondition | ExitCondition,
+    candleIndex: number,
+    cache: SignalCache
 ): boolean {
-  // Check required indicators (ALL must signal)
-  for (const config of condition.required) {
-    if (!isIndicatorSignaling(config, candleIndex, cache)) {
-      return false; // One required indicator not signaling = condition not met
+    // Check required indicators (ALL must signal)
+    for (const config of condition.required) {
+        if (!isIndicatorSignaling(config, candleIndex, cache)) {
+            return false; // One required indicator not signaling = condition not met
+        }
     }
-  }
 
-  // If no optional indicators, required alone is sufficient
-  if (condition.optional.length === 0) {
-    return true;
-  }
-
-  // Check optional indicators (at least ONE must signal)
-  for (const config of condition.optional) {
-    if (isIndicatorSignaling(config, candleIndex, cache)) {
-      return true; // Found one optional signaling = condition met
+    // If no optional indicators, required alone is sufficient
+    if (condition.optional.length === 0) {
+        return true;
     }
-  }
 
-  // No optional indicators signaled
-  return false;
+    // Check optional indicators (at least ONE must signal)
+    for (const config of condition.optional) {
+        if (isIndicatorSignaling(config, candleIndex, cache)) {
+            return true; // Found one optional signaling = condition met
+        }
+    }
+
+    // No optional indicators signaled
+    return false;
 }
 
 // =============================================================================
@@ -96,18 +92,18 @@ export function evaluateCondition(
  * @returns true if condition just became true (wasn't true on previous candle)
  */
 export function detectConditionEdge(
-  condition: EntryCondition | ExitCondition,
-  candleIndex: number,
-  cache: SignalCache
+    condition: EntryCondition | ExitCondition,
+    candleIndex: number,
+    cache: SignalCache
 ): boolean {
-  // Can't have an edge on the first candle
-  if (candleIndex === 0) {
-    return evaluateCondition(condition, candleIndex, cache);
-  }
+    // Can't have an edge on the first candle
+    if (candleIndex === 0) {
+        return evaluateCondition(condition, candleIndex, cache);
+    }
 
-  const isTrue = evaluateCondition(condition, candleIndex, cache);
-  const wasTrueBefore = evaluateCondition(condition, candleIndex - 1, cache);
+    const isTrue = evaluateCondition(condition, candleIndex, cache);
+    const wasTrueBefore = evaluateCondition(condition, candleIndex - 1, cache);
 
-  // Edge = wasn't true before, but is true now
-  return isTrue && !wasTrueBefore;
+    // Edge = wasn't true before, but is true now
+    return isTrue && !wasTrueBefore;
 }

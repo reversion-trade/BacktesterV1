@@ -23,5 +23,5 @@
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "**/*.md", "bun.lock"]
+  "exclude": ["node_modules", "**/*.md", "bun.lock", "src/algo.ts"]
 }

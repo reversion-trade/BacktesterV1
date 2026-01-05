@@ -6,10 +6,7 @@
  */
 
 import type { EquityPoint } from "./types.ts";
-import {
-  downsampleWithPeaks,
-  downsamplePreserveDrawdownPeaks,
-} from "../utils/downsampling.ts";
+import { downsampleWithPeaks, downsamplePreserveDrawdownPeaks } from "../utils/downsampling.ts";
 
 // =============================================================================
 // TYPES
@@ -19,18 +16,18 @@ import {
  * Configuration for equity curve processing.
  */
 export interface EquityCurveConfig {
-  /** Target number of points after downsampling (0 = no downsampling) */
-  targetPoints?: number;
-  /** Whether to preserve drawdown peaks during downsampling */
-  preserveDrawdownPeaks?: boolean;
+    /** Target number of points after downsampling (0 = no downsampling) */
+    targetPoints?: number;
+    /** Whether to preserve drawdown peaks during downsampling */
+    preserveDrawdownPeaks?: boolean;
 }
 
 /**
  * Default processing configuration.
  */
 const DEFAULT_CONFIG: Required<EquityCurveConfig> = {
-  targetPoints: 500,
-  preserveDrawdownPeaks: true,
+    targetPoints: 500,
+    preserveDrawdownPeaks: true,
 };
 
 // =============================================================================
@@ -45,24 +42,21 @@ const DEFAULT_CONFIG: Required<EquityCurveConfig> = {
  * @param config - Processing configuration
  * @returns Processed equity curve ready for storage
  */
-export function processEquityCurve(
-  rawCurve: EquityPoint[],
-  config: EquityCurveConfig = {}
-): EquityPoint[] {
-  const cfg = { ...DEFAULT_CONFIG, ...config };
+export function processEquityCurve(rawCurve: EquityPoint[], config: EquityCurveConfig = {}): EquityPoint[] {
+    const cfg = { ...DEFAULT_CONFIG, ...config };
 
-  if (rawCurve.length === 0) return [];
+    if (rawCurve.length === 0) return [];
 
-  let processed = rawCurve;
+    let processed = rawCurve;
 
-  // Downsample for storage
-  if (cfg.targetPoints > 0 && processed.length > cfg.targetPoints) {
-    processed = cfg.preserveDrawdownPeaks
-      ? downsamplePreserveDrawdownPeaks(processed, cfg.targetPoints)
-      : downsampleWithPeaks(processed, cfg.targetPoints);
-  }
+    // Downsample for storage
+    if (cfg.targetPoints > 0 && processed.length > cfg.targetPoints) {
+        processed = cfg.preserveDrawdownPeaks
+            ? downsamplePreserveDrawdownPeaks(processed, cfg.targetPoints)
+            : downsampleWithPeaks(processed, cfg.targetPoints);
+    }
 
-  return processed;
+    return processed;
 }
 
 // =============================================================================
@@ -73,35 +67,34 @@ export function processEquityCurve(
  * Get summary statistics from an equity curve.
  */
 export function getEquityCurveStats(curve: EquityPoint[]): {
-  startEquity: number;
-  endEquity: number;
-  totalReturnPct: number;
-  maxDrawdownPct: number;
-  maxRunupPct: number;
+    startEquity: number;
+    endEquity: number;
+    totalReturnPct: number;
+    maxDrawdownPct: number;
+    maxRunupPct: number;
 } {
-  if (curve.length === 0) {
+    if (curve.length === 0) {
+        return {
+            startEquity: 0,
+            endEquity: 0,
+            totalReturnPct: 0,
+            maxDrawdownPct: 0,
+            maxRunupPct: 0,
+        };
+    }
+
+    const startEquity = curve[0]!.equity;
+    const endEquity = curve[curve.length - 1]!.equity;
+    const totalReturnPct = startEquity > 0 ? (endEquity - startEquity) / startEquity : 0;
+
+    const maxDrawdownPct = Math.max(...curve.map((p) => p.drawdownPct));
+    const maxRunupPct = Math.max(...curve.map((p) => p.runupPct));
+
     return {
-      startEquity: 0,
-      endEquity: 0,
-      totalReturnPct: 0,
-      maxDrawdownPct: 0,
-      maxRunupPct: 0,
+        startEquity,
+        endEquity,
+        totalReturnPct,
+        maxDrawdownPct,
+        maxRunupPct,
     };
-  }
-
-  const startEquity = curve[0]!.equity;
-  const endEquity = curve[curve.length - 1]!.equity;
-  const totalReturnPct =
-    startEquity > 0 ? (endEquity - startEquity) / startEquity : 0;
-
-  const maxDrawdownPct = Math.max(...curve.map((p) => p.drawdownPct));
-  const maxRunupPct = Math.max(...curve.map((p) => p.runupPct));
-
-  return {
-    startEquity,
-    endEquity,
-    totalReturnPct,
-    maxDrawdownPct,
-    maxRunupPct,
-  };
 }

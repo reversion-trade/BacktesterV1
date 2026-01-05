@@ -9,24 +9,11 @@
  */
 
 import type { Direction, ValueConfig } from "../../core/types.ts";
-import {
-  BaseSpecialIndicator,
-  StopLossConfigSchema,
-} from "./base.ts";
-import type { PriceLevelResult } from "./types.ts";
+import { BaseSpecialIndicator, StopLossConfigSchema } from "./base.ts";
+import type { PriceLevelResult, StopLossConfig } from "./types.ts";
 import { isPriceLevelHit } from "./types.ts";
 
-// =============================================================================
-// CONFIG TYPE
-// =============================================================================
-
-/**
- * Configuration for stop loss indicator.
- */
-export interface StopLossConfig {
-  direction: Direction;
-  stopLoss: ValueConfig;
-}
+export type { StopLossConfig };
 
 // =============================================================================
 // STOP LOSS INDICATOR
@@ -51,89 +38,86 @@ export interface StopLossConfig {
  * sl.isTriggered(); // true
  * sl.getTriggerPrice(); // 48900
  */
-export class StopLossIndicator extends BaseSpecialIndicator<
-  StopLossConfig,
-  PriceLevelResult
-> {
-  // Calculated price level
-  private stopLossPrice: number = 0;
+export class StopLossIndicator extends BaseSpecialIndicator<StopLossConfig, PriceLevelResult> {
+    // Calculated price level
+    private stopLossPrice: number = 0;
 
-  constructor(config: StopLossConfig) {
-    super(config);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Lifecycle
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Reset for a new trade.
-   * Calculates the stop loss price level based on entry price and config.
-   */
-  protected onReset(): void {
-    const offset = this.calculateOffset(this.config.stopLoss);
-
-    // Calculate SL price level
-    if (this.config.direction === "LONG") {
-      // LONG: SL below entry
-      this.stopLossPrice = this.entryPrice - offset;
-    } else {
-      // SHORT: SL above entry
-      this.stopLossPrice = this.entryPrice + offset;
+    constructor(config: StopLossConfig) {
+        super(config);
     }
-  }
 
-  // ---------------------------------------------------------------------------
-  // Core Logic
-  // ---------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------
+    // Lifecycle
+    // ---------------------------------------------------------------------------
 
-  /**
-   * Process a batch of prices and check for stop loss hits.
-   * Once triggered, all subsequent prices also return true.
-   */
-  calculate(prices: number[], times: number[]): PriceLevelResult[] {
-    return this.withErrorHandling(() => {
-      const results: PriceLevelResult[] = [];
+    /**
+     * Reset for a new trade.
+     * Calculates the stop loss price level based on entry price and config.
+     */
+    protected onReset(): void {
+        const offset = this.calculateOffset(this.config.stopLoss);
 
-      for (let i = 0; i < prices.length; i++) {
-        const price = prices[i]!;
-        const time = times[i]!;
-
-        // If already triggered, all subsequent results are true
-        if (this.triggered) {
-          results.push(true);
-          continue;
+        // Calculate SL price level
+        if (this.config.direction === "LONG") {
+            // LONG: SL below entry
+            this.stopLossPrice = this.entryPrice - offset;
+        } else {
+            // SHORT: SL above entry
+            this.stopLossPrice = this.entryPrice + offset;
         }
+    }
 
-        // Check if this price hits the stop loss
-        const hit = isPriceLevelHit(
-          price,
-          this.stopLossPrice,
-          this.config.direction,
-          true // isStopLoss
-        );
+    // ---------------------------------------------------------------------------
+    // Core Logic
+    // ---------------------------------------------------------------------------
 
-        if (hit) {
-          this.recordTrigger(price, time);
-        }
+    /**
+     * Process a batch of prices and check for stop loss hits.
+     * Once triggered, all subsequent prices also return true.
+     */
+    calculate(prices: number[], times: number[]): PriceLevelResult[] {
+        return this.withErrorHandling(() => {
+            const results: PriceLevelResult[] = [];
 
-        results.push(hit);
-      }
+            for (let i = 0; i < prices.length; i++) {
+                const price = prices[i]!;
+                const time = times[i]!;
 
-      return results;
-    }, "calculate");
-  }
+                // If already triggered, all subsequent results are true
+                if (this.triggered) {
+                    results.push(true);
+                    continue;
+                }
 
-  // ---------------------------------------------------------------------------
-  // Accessors
-  // ---------------------------------------------------------------------------
+                // Check if this price hits the stop loss
+                const hit = isPriceLevelHit(
+                    price,
+                    this.stopLossPrice,
+                    this.config.direction,
+                    true // isStopLoss
+                );
 
-  /**
-   * Get the current stop loss price level.
-   */
-  getStopLossPrice(): number {
-    return this.stopLossPrice;
-  }
+                if (hit) {
+                    this.recordTrigger(price, time);
+                }
+
+                results.push(hit);
+            }
+
+            return results;
+        }, "calculate");
+    }
+
+    // ---------------------------------------------------------------------------
+    // Accessors
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Get the current stop loss price level.
+     */
+    getStopLossPrice(): number {
+        return this.stopLossPrice;
+    }
 }
 
 // =============================================================================
@@ -143,10 +127,7 @@ export class StopLossIndicator extends BaseSpecialIndicator<
 /**
  * Create a new stop loss indicator with validation.
  */
-export function createStopLoss(
-  direction: Direction,
-  stopLoss: ValueConfig
-): StopLossIndicator {
-  const config = StopLossConfigSchema.parse({ direction, stopLoss });
-  return new StopLossIndicator(config);
+export function createStopLoss(direction: Direction, stopLoss: ValueConfig): StopLossIndicator {
+    const config = StopLossConfigSchema.parse({ direction, stopLoss });
+    return new StopLossIndicator(config);
 }

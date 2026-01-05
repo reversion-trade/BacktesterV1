@@ -22,10 +22,10 @@
 
 import type { ConditionType, ConditionSnapshot } from "../../events/types.ts";
 import type {
-  IIndicatorFeed,
-  IndicatorInfo,
-  IndicatorState,
-  ConditionEvaluation,
+    IIndicatorFeed,
+    IndicatorInfo,
+    IndicatorState,
+    ConditionEvaluation,
 } from "../../interfaces/indicator-feed.ts";
 
 // =============================================================================
@@ -78,285 +78,281 @@ export type RawValueCache = Map<string, number[]>;
  * Represents an indicator signal flip (change from true to false or vice versa).
  */
 export interface IndicatorFlip {
-  indicatorKey: string;
-  previousValue: boolean;
-  newValue: boolean;
+    indicatorKey: string;
+    previousValue: boolean;
+    newValue: boolean;
 }
 
 export class PreCalculatedFeed implements IIndicatorFeed {
-  private signalCache: SignalCache;
-  private rawValueCache: RawValueCache | null;
-  private indicatorInfoMap: Map<string, IndicatorInfo>;
-  private currentBarIndex: number = 0;
-  private currentTimestamp: number = 0;
-  private totalBars: number = 0;
-  private previousConditionMet: Map<ConditionType, boolean> = new Map();
-  private previousSignals: Map<string, boolean> = new Map();
-  private lastFlips: IndicatorFlip[] = [];
+    private signalCache: SignalCache;
+    private rawValueCache: RawValueCache | null;
+    private indicatorInfoMap: Map<string, IndicatorInfo>;
+    private currentBarIndex: number = 0;
+    private currentTimestamp: number = 0;
+    private totalBars: number = 0;
+    private previousConditionMet: Map<ConditionType, boolean> = new Map();
+    private previousSignals: Map<string, boolean> = new Map();
+    private lastFlips: IndicatorFlip[] = [];
 
-  constructor(
-    signalCache: SignalCache,
-    indicatorInfo: Map<string, IndicatorInfo>,
-    rawValueCache?: RawValueCache
-  ) {
-    this.signalCache = signalCache;
-    this.indicatorInfoMap = indicatorInfo;
-    this.rawValueCache = rawValueCache || null;
+    constructor(signalCache: SignalCache, indicatorInfo: Map<string, IndicatorInfo>, rawValueCache?: RawValueCache) {
+        this.signalCache = signalCache;
+        this.indicatorInfoMap = indicatorInfo;
+        this.rawValueCache = rawValueCache || null;
 
-    // Determine total bars from first signal array
-    for (const signals of signalCache.values()) {
-      this.totalBars = signals.length;
-      break;
+        // Determine total bars from first signal array
+        for (const signals of signalCache.values()) {
+            this.totalBars = signals.length;
+            break;
+        }
+
+        // Initialize previous condition states
+        this.previousConditionMet.set("LONG_ENTRY", false);
+        this.previousConditionMet.set("LONG_EXIT", false);
+        this.previousConditionMet.set("SHORT_ENTRY", false);
+        this.previousConditionMet.set("SHORT_EXIT", false);
     }
 
-    // Initialize previous condition states
-    this.previousConditionMet.set("LONG_ENTRY", false);
-    this.previousConditionMet.set("LONG_EXIT", false);
-    this.previousConditionMet.set("SHORT_ENTRY", false);
-    this.previousConditionMet.set("SHORT_EXIT", false);
-  }
+    // ===========================================================================
+    // IIndicatorFeed IMPLEMENTATION
+    // ===========================================================================
 
-  // ===========================================================================
-  // IIndicatorFeed IMPLEMENTATION
-  // ===========================================================================
+    setCurrentBar(barIndex: number, timestamp: number): void {
+        // Clear previous flips
+        this.lastFlips = [];
 
-  setCurrentBar(barIndex: number, timestamp: number): void {
-    // Clear previous flips
-    this.lastFlips = [];
+        // Before changing bar, save current condition states as "previous"
+        if (barIndex !== this.currentBarIndex) {
+            for (const conditionType of ["LONG_ENTRY", "LONG_EXIT", "SHORT_ENTRY", "SHORT_EXIT"] as ConditionType[]) {
+                const snapshot = this.getConditionSnapshot(conditionType);
+                this.previousConditionMet.set(conditionType, snapshot.conditionMet);
+            }
 
-    // Before changing bar, save current condition states as "previous"
-    if (barIndex !== this.currentBarIndex) {
-      for (const conditionType of ["LONG_ENTRY", "LONG_EXIT", "SHORT_ENTRY", "SHORT_EXIT"] as ConditionType[]) {
+            // Save current signals as previous before moving to new bar
+            for (const [key, signalArray] of this.signalCache) {
+                if (this.currentBarIndex < signalArray.length) {
+                    const currentSignal = signalArray[this.currentBarIndex];
+                    if (currentSignal !== undefined) {
+                        this.previousSignals.set(key, currentSignal);
+                    }
+                }
+            }
+        }
+
+        this.currentBarIndex = barIndex;
+        this.currentTimestamp = timestamp;
+
+        // Detect flips by comparing previous signals to current signals
+        for (const [key, signalArray] of this.signalCache) {
+            if (barIndex < signalArray.length) {
+                const newSignal = signalArray[barIndex];
+                const previousSignal = this.previousSignals.get(key);
+
+                // If we have a previous value and it changed, record the flip
+                if (previousSignal !== undefined && newSignal !== undefined && previousSignal !== newSignal) {
+                    this.lastFlips.push({
+                        indicatorKey: key,
+                        previousValue: previousSignal,
+                        newValue: newSignal,
+                    });
+                }
+            }
+        }
+    }
+
+    /**
+     * Get indicator flips that occurred when transitioning to the current bar.
+     */
+    getLastFlips(): IndicatorFlip[] {
+        return [...this.lastFlips];
+    }
+
+    getCurrentBarIndex(): number {
+        return this.currentBarIndex;
+    }
+
+    getCurrentSignals(): Map<string, boolean> {
+        const signals = new Map<string, boolean>();
+        for (const [key, signalArray] of this.signalCache) {
+            if (this.currentBarIndex < signalArray.length) {
+                const signal = signalArray[this.currentBarIndex];
+                if (signal !== undefined) {
+                    signals.set(key, signal);
+                }
+            }
+        }
+        return signals;
+    }
+
+    getSignal(indicatorKey: string): boolean | undefined {
+        const signalArray = this.signalCache.get(indicatorKey);
+        if (!signalArray || this.currentBarIndex >= signalArray.length) {
+            return undefined;
+        }
+        return signalArray[this.currentBarIndex];
+    }
+
+    getRawValue(indicatorKey: string): number | undefined {
+        if (!this.rawValueCache) {
+            return undefined;
+        }
+        const valueArray = this.rawValueCache.get(indicatorKey);
+        if (!valueArray || this.currentBarIndex >= valueArray.length) {
+            return undefined;
+        }
+        return valueArray[this.currentBarIndex];
+    }
+
+    evaluateCondition(conditionType: ConditionType): ConditionEvaluation {
         const snapshot = this.getConditionSnapshot(conditionType);
-        this.previousConditionMet.set(conditionType, snapshot.conditionMet);
-      }
+        const indicators = this.getIndicatorsForCondition(conditionType);
 
-      // Save current signals as previous before moving to new bar
-      for (const [key, signalArray] of this.signalCache) {
-        if (this.currentBarIndex < signalArray.length) {
-          const currentSignal = signalArray[this.currentBarIndex];
-          if (currentSignal !== undefined) {
-            this.previousSignals.set(key, currentSignal);
-          }
+        const indicatorStates: IndicatorState[] = indicators.map((info) => ({
+            key: info.key,
+            signal: this.getSignal(info.key) ?? false,
+            rawValue: this.getRawValue(info.key),
+            lastUpdated: this.currentTimestamp,
+        }));
+
+        return {
+            conditionType,
+            isMet: snapshot.conditionMet,
+            snapshot,
+            indicatorStates,
+        };
+    }
+
+    getConditionSnapshot(conditionType: ConditionType): ConditionSnapshot {
+        const indicators = this.getIndicatorsForCondition(conditionType);
+
+        const required = indicators.filter((i) => i.isRequired);
+        const optional = indicators.filter((i) => !i.isRequired);
+
+        let requiredTrue = 0;
+        let optionalTrue = 0;
+
+        for (const ind of required) {
+            if (this.getSignal(ind.key)) {
+                requiredTrue++;
+            }
         }
-      }
-    }
 
-    this.currentBarIndex = barIndex;
-    this.currentTimestamp = timestamp;
-
-    // Detect flips by comparing previous signals to current signals
-    for (const [key, signalArray] of this.signalCache) {
-      if (barIndex < signalArray.length) {
-        const newSignal = signalArray[barIndex];
-        const previousSignal = this.previousSignals.get(key);
-
-        // If we have a previous value and it changed, record the flip
-        if (previousSignal !== undefined && newSignal !== undefined && previousSignal !== newSignal) {
-          this.lastFlips.push({
-            indicatorKey: key,
-            previousValue: previousSignal,
-            newValue: newSignal,
-          });
+        for (const ind of optional) {
+            if (this.getSignal(ind.key)) {
+                optionalTrue++;
+            }
         }
-      }
-    }
-  }
 
-  /**
-   * Get indicator flips that occurred when transitioning to the current bar.
-   */
-  getLastFlips(): IndicatorFlip[] {
-    return [...this.lastFlips];
-  }
+        const requiredTotal = required.length;
+        const optionalTotal = optional.length;
 
-  getCurrentBarIndex(): number {
-    return this.currentBarIndex;
-  }
+        // Condition is met if:
+        // - All required are true AND
+        // - At least one optional is true (if any optional exist)
+        const allRequiredMet = requiredTrue === requiredTotal;
+        const optionalSatisfied = optionalTotal === 0 || optionalTrue > 0;
+        const conditionMet = requiredTotal > 0 && allRequiredMet && optionalSatisfied;
 
-  getCurrentSignals(): Map<string, boolean> {
-    const signals = new Map<string, boolean>();
-    for (const [key, signalArray] of this.signalCache) {
-      if (this.currentBarIndex < signalArray.length) {
-        const signal = signalArray[this.currentBarIndex];
-        if (signal !== undefined) {
-          signals.set(key, signal);
+        // Calculate distance from trigger
+        let distanceFromTrigger = 0;
+        if (!conditionMet) {
+            // How many required still need to flip?
+            const requiredNeeded = requiredTotal - requiredTrue;
+            // If optional exists and none are true, we need at least 1
+            const optionalNeeded = optionalTotal > 0 && optionalTrue === 0 ? 1 : 0;
+            distanceFromTrigger = requiredNeeded + optionalNeeded;
         }
-      }
-    }
-    return signals;
-  }
 
-  getSignal(indicatorKey: string): boolean | undefined {
-    const signalArray = this.signalCache.get(indicatorKey);
-    if (!signalArray || this.currentBarIndex >= signalArray.length) {
-      return undefined;
-    }
-    return signalArray[this.currentBarIndex];
-  }
-
-  getRawValue(indicatorKey: string): number | undefined {
-    if (!this.rawValueCache) {
-      return undefined;
-    }
-    const valueArray = this.rawValueCache.get(indicatorKey);
-    if (!valueArray || this.currentBarIndex >= valueArray.length) {
-      return undefined;
-    }
-    return valueArray[this.currentBarIndex];
-  }
-
-  evaluateCondition(conditionType: ConditionType): ConditionEvaluation {
-    const snapshot = this.getConditionSnapshot(conditionType);
-    const indicators = this.getIndicatorsForCondition(conditionType);
-
-    const indicatorStates: IndicatorState[] = indicators.map(info => ({
-      key: info.key,
-      signal: this.getSignal(info.key) ?? false,
-      rawValue: this.getRawValue(info.key),
-      lastUpdated: this.currentTimestamp,
-    }));
-
-    return {
-      conditionType,
-      isMet: snapshot.conditionMet,
-      snapshot,
-      indicatorStates,
-    };
-  }
-
-  getConditionSnapshot(conditionType: ConditionType): ConditionSnapshot {
-    const indicators = this.getIndicatorsForCondition(conditionType);
-
-    const required = indicators.filter(i => i.isRequired);
-    const optional = indicators.filter(i => !i.isRequired);
-
-    let requiredTrue = 0;
-    let optionalTrue = 0;
-
-    for (const ind of required) {
-      if (this.getSignal(ind.key)) {
-        requiredTrue++;
-      }
+        return {
+            requiredTrue,
+            requiredTotal,
+            optionalTrue,
+            optionalTotal,
+            conditionMet,
+            distanceFromTrigger,
+        };
     }
 
-    for (const ind of optional) {
-      if (this.getSignal(ind.key)) {
-        optionalTrue++;
-      }
+    getIndicatorInfo(): Map<string, IndicatorInfo> {
+        return new Map(this.indicatorInfoMap);
     }
 
-    const requiredTotal = required.length;
-    const optionalTotal = optional.length;
-
-    // Condition is met if:
-    // - All required are true AND
-    // - At least one optional is true (if any optional exist)
-    const allRequiredMet = requiredTrue === requiredTotal;
-    const optionalSatisfied = optionalTotal === 0 || optionalTrue > 0;
-    const conditionMet = requiredTotal > 0 && allRequiredMet && optionalSatisfied;
-
-    // Calculate distance from trigger
-    let distanceFromTrigger = 0;
-    if (!conditionMet) {
-      // How many required still need to flip?
-      const requiredNeeded = requiredTotal - requiredTrue;
-      // If optional exists and none are true, we need at least 1
-      const optionalNeeded = optionalTotal > 0 && optionalTrue === 0 ? 1 : 0;
-      distanceFromTrigger = requiredNeeded + optionalNeeded;
+    getIndicatorsForCondition(conditionType: ConditionType): IndicatorInfo[] {
+        const result: IndicatorInfo[] = [];
+        for (const info of this.indicatorInfoMap.values()) {
+            if (info.conditionType === conditionType) {
+                result.push(info);
+            }
+        }
+        return result;
     }
 
-    return {
-      requiredTrue,
-      requiredTotal,
-      optionalTrue,
-      optionalTotal,
-      conditionMet,
-      distanceFromTrigger,
-    };
-  }
-
-  getIndicatorInfo(): Map<string, IndicatorInfo> {
-    return new Map(this.indicatorInfoMap);
-  }
-
-  getIndicatorsForCondition(conditionType: ConditionType): IndicatorInfo[] {
-    const result: IndicatorInfo[] = [];
-    for (const info of this.indicatorInfoMap.values()) {
-      if (info.conditionType === conditionType) {
-        result.push(info);
-      }
+    getPreviousConditionMet(conditionType: ConditionType): boolean {
+        return this.previousConditionMet.get(conditionType) ?? false;
     }
-    return result;
-  }
 
-  getPreviousConditionMet(conditionType: ConditionType): boolean {
-    return this.previousConditionMet.get(conditionType) ?? false;
-  }
-
-  getTotalBars(): number {
-    return this.totalBars;
-  }
-
-  // ===========================================================================
-  // ADDITIONAL HELPERS (Backtest-specific)
-  // ===========================================================================
-
-  /**
-   * Get signal at a specific bar (without changing current bar).
-   */
-  getSignalAtBar(indicatorKey: string, barIndex: number): boolean | undefined {
-    const signalArray = this.signalCache.get(indicatorKey);
-    if (!signalArray || barIndex >= signalArray.length) {
-      return undefined;
+    getTotalBars(): number {
+        return this.totalBars;
     }
-    return signalArray[barIndex];
-  }
 
-  /**
-   * Get all indicator keys.
-   */
-  getIndicatorKeys(): string[] {
-    return Array.from(this.signalCache.keys());
-  }
+    // ===========================================================================
+    // ADDITIONAL HELPERS (Backtest-specific)
+    // ===========================================================================
 
-  /**
-   * Check if a specific indicator exists in the feed.
-   */
-  hasIndicator(indicatorKey: string): boolean {
-    return this.signalCache.has(indicatorKey);
-  }
+    /**
+     * Get signal at a specific bar (without changing current bar).
+     */
+    getSignalAtBar(indicatorKey: string, barIndex: number): boolean | undefined {
+        const signalArray = this.signalCache.get(indicatorKey);
+        if (!signalArray || barIndex >= signalArray.length) {
+            return undefined;
+        }
+        return signalArray[barIndex];
+    }
 
-  /**
-   * Get condition snapshot at a specific bar (without changing current bar).
-   */
-  getConditionSnapshotAtBar(conditionType: ConditionType, barIndex: number): ConditionSnapshot {
-    const originalBar = this.currentBarIndex;
-    const originalTimestamp = this.currentTimestamp;
+    /**
+     * Get all indicator keys.
+     */
+    getIndicatorKeys(): string[] {
+        return Array.from(this.signalCache.keys());
+    }
 
-    // Temporarily set bar (without updating previous condition state)
-    this.currentBarIndex = barIndex;
-    const snapshot = this.getConditionSnapshot(conditionType);
+    /**
+     * Check if a specific indicator exists in the feed.
+     */
+    hasIndicator(indicatorKey: string): boolean {
+        return this.signalCache.has(indicatorKey);
+    }
 
-    // Restore
-    this.currentBarIndex = originalBar;
-    this.currentTimestamp = originalTimestamp;
+    /**
+     * Get condition snapshot at a specific bar (without changing current bar).
+     */
+    getConditionSnapshotAtBar(conditionType: ConditionType, barIndex: number): ConditionSnapshot {
+        const originalBar = this.currentBarIndex;
+        const originalTimestamp = this.currentTimestamp;
 
-    return snapshot;
-  }
+        // Temporarily set bar (without updating previous condition state)
+        this.currentBarIndex = barIndex;
+        const snapshot = this.getConditionSnapshot(conditionType);
 
-  /**
-   * Reset the feed state (for restarting backtest).
-   */
-  reset(): void {
-    this.currentBarIndex = 0;
-    this.currentTimestamp = 0;
-    this.previousConditionMet.clear();
-    this.previousConditionMet.set("LONG_ENTRY", false);
-    this.previousConditionMet.set("LONG_EXIT", false);
-    this.previousConditionMet.set("SHORT_ENTRY", false);
-    this.previousConditionMet.set("SHORT_EXIT", false);
-    this.previousSignals.clear();
-    this.lastFlips = [];
-  }
+        // Restore
+        this.currentBarIndex = originalBar;
+        this.currentTimestamp = originalTimestamp;
+
+        return snapshot;
+    }
+
+    /**
+     * Reset the feed state (for restarting backtest).
+     */
+    reset(): void {
+        this.currentBarIndex = 0;
+        this.currentTimestamp = 0;
+        this.previousConditionMet.clear();
+        this.previousConditionMet.set("LONG_ENTRY", false);
+        this.previousConditionMet.set("LONG_EXIT", false);
+        this.previousConditionMet.set("SHORT_ENTRY", false);
+        this.previousConditionMet.set("SHORT_EXIT", false);
+        this.previousSignals.clear();
+        this.lastFlips = [];
+    }
 }

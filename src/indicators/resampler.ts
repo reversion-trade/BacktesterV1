@@ -33,39 +33,39 @@ export const RESOLUTION_BUCKETS = [...CANDLE_BUCKETS].sort((a, b) => a - b);
  * Information about an indicator's resolution requirements.
  */
 export interface IndicatorResolutionInfo {
-  cacheKey: string;
-  resolution: number;
-  warmupCount: number;
+    cacheKey: string;
+    resolution: number;
+    warmupCount: number;
 }
 
 /**
  * Result of determining simulation resolution.
  */
 export interface SimulationResolutionResult {
-  /** The simulation resolution in seconds */
-  simulationResolution: number;
-  /** Minimum indicator resolution found */
-  minIndicatorResolution: number;
-  /** Resolution info for each indicator */
-  indicatorResolutions: IndicatorResolutionInfo[];
-  /** Maximum warmup period across all indicators */
-  maxWarmupCandles: number;
+    /** The simulation resolution in seconds */
+    simulationResolution: number;
+    /** Minimum indicator resolution found */
+    minIndicatorResolution: number;
+    /** Resolution info for each indicator */
+    indicatorResolutions: IndicatorResolutionInfo[];
+    /** Maximum warmup period across all indicators */
+    maxWarmupCandles: number;
 }
 
 /**
  * Resampled signal cache with timestamps.
  */
 export interface ResampledSignalCache {
-  /** Get resampled signals for an indicator by cache key */
-  get(key: string): boolean[] | undefined;
-  /** Check if indicator has been resampled */
-  has(key: string): boolean;
-  /** Get all cache keys */
-  keys(): string[];
-  /** Get the simulation resolution */
-  getResolution(): number;
-  /** Get simulation timestamps */
-  getTimestamps(): number[];
+    /** Get resampled signals for an indicator by cache key */
+    get(key: string): boolean[] | undefined;
+    /** Check if indicator has been resampled */
+    has(key: string): boolean;
+    /** Get all cache keys */
+    keys(): string[];
+    /** Get the simulation resolution */
+    getResolution(): number;
+    /** Get simulation timestamps */
+    getTimestamps(): number[];
 }
 
 // =============================================================================
@@ -84,18 +84,18 @@ export interface ResampledSignalCache {
  * getNextLowerBucket(15)  // 15 (already at minimum)
  */
 export function getNextLowerBucket(resolution: number): number {
-  // Find the largest bucket that is strictly less than resolution
-  let result = RESOLUTION_BUCKETS[0]!;
+    // Find the largest bucket that is strictly less than resolution
+    let result = RESOLUTION_BUCKETS[0]!;
 
-  for (const bucket of RESOLUTION_BUCKETS) {
-    if (bucket < resolution) {
-      result = bucket;
-    } else {
-      break;
+    for (const bucket of RESOLUTION_BUCKETS) {
+        if (bucket < resolution) {
+            result = bucket;
+        } else {
+            break;
+        }
     }
-  }
 
-  return result;
+    return result;
 }
 
 /**
@@ -104,28 +104,26 @@ export function getNextLowerBucket(resolution: number): number {
  * @param configs - Array of indicator configurations
  * @returns Array of resolution info for each unique indicator
  */
-export function collectIndicatorResolutions(
-  configs: IndicatorConfig[]
-): IndicatorResolutionInfo[] {
-  const seen = new Set<string>();
-  const results: IndicatorResolutionInfo[] = [];
+export function collectIndicatorResolutions(configs: IndicatorConfig[]): IndicatorResolutionInfo[] {
+    const seen = new Set<string>();
+    const results: IndicatorResolutionInfo[] = [];
 
-  for (const config of configs) {
-    const indicator = makeIndicator(config);
-    const key = indicator.getCacheKey();
+    for (const config of configs) {
+        const indicator = makeIndicator(config);
+        const key = indicator.getCacheKey();
 
-    if (seen.has(key)) continue;
-    seen.add(key);
+        if (seen.has(key)) continue;
+        seen.add(key);
 
-    const requirements = indicator.getPointRequirements();
-    results.push({
-      cacheKey: key,
-      resolution: requirements.resolution,
-      warmupCount: requirements.count,
-    });
-  }
+        const requirements = indicator.getPointRequirements();
+        results.push({
+            cacheKey: key,
+            resolution: requirements.resolution,
+            warmupCount: requirements.count,
+        });
+    }
 
-  return results;
+    return results;
 }
 
 /**
@@ -139,38 +137,32 @@ export function collectIndicatorResolutions(
  * @param configs - Array of indicator configurations
  * @returns Simulation resolution details
  */
-export function determineSimulationResolution(
-  configs: IndicatorConfig[]
-): SimulationResolutionResult {
-  const indicatorResolutions = collectIndicatorResolutions(configs);
+export function determineSimulationResolution(configs: IndicatorConfig[]): SimulationResolutionResult {
+    const indicatorResolutions = collectIndicatorResolutions(configs);
 
-  if (indicatorResolutions.length === 0) {
+    if (indicatorResolutions.length === 0) {
+        return {
+            simulationResolution: MIN_SIMULATION_RESOLUTION,
+            minIndicatorResolution: MIN_SIMULATION_RESOLUTION,
+            indicatorResolutions: [],
+            maxWarmupCandles: 0,
+        };
+    }
+
+    // Find minimum resolution and max warmup
+    const minIndicatorResolution = Math.min(...indicatorResolutions.map((r) => r.resolution));
+    const maxWarmupCandles = Math.max(...indicatorResolutions.map((r) => r.warmupCount));
+
+    // Get next lower bucket, floored at minimum
+    const nextLower = getNextLowerBucket(minIndicatorResolution);
+    const simulationResolution = Math.max(nextLower, MIN_SIMULATION_RESOLUTION);
+
     return {
-      simulationResolution: MIN_SIMULATION_RESOLUTION,
-      minIndicatorResolution: MIN_SIMULATION_RESOLUTION,
-      indicatorResolutions: [],
-      maxWarmupCandles: 0,
+        simulationResolution,
+        minIndicatorResolution,
+        indicatorResolutions,
+        maxWarmupCandles,
     };
-  }
-
-  // Find minimum resolution and max warmup
-  const minIndicatorResolution = Math.min(
-    ...indicatorResolutions.map((r) => r.resolution)
-  );
-  const maxWarmupCandles = Math.max(
-    ...indicatorResolutions.map((r) => r.warmupCount)
-  );
-
-  // Get next lower bucket, floored at minimum
-  const nextLower = getNextLowerBucket(minIndicatorResolution);
-  const simulationResolution = Math.max(nextLower, MIN_SIMULATION_RESOLUTION);
-
-  return {
-    simulationResolution,
-    minIndicatorResolution,
-    indicatorResolutions,
-    maxWarmupCandles,
-  };
 }
 
 // =============================================================================
@@ -185,18 +177,14 @@ export function determineSimulationResolution(
  * @param resolution - Resolution in seconds
  * @returns Array of timestamps
  */
-export function generateTimestamps(
-  startTime: number,
-  endTime: number,
-  resolution: number
-): number[] {
-  const timestamps: number[] = [];
+export function generateTimestamps(startTime: number, endTime: number, resolution: number): number[] {
+    const timestamps: number[] = [];
 
-  for (let t = startTime; t <= endTime; t += resolution) {
-    timestamps.push(t);
-  }
+    for (let t = startTime; t <= endTime; t += resolution) {
+        timestamps.push(t);
+    }
 
-  return timestamps;
+    return timestamps;
 }
 
 /**
@@ -216,42 +204,35 @@ export function generateTimestamps(
  * resampleSignals(signals, signalTimes, simTimes);
  * // [true, true, true, true, true, true, true, true, true, true, false]
  */
-export function resampleSignals(
-  signals: boolean[],
-  signalTimes: number[],
-  simulationTimes: number[]
-): boolean[] {
-  if (signals.length === 0 || simulationTimes.length === 0) {
-    return new Array(simulationTimes.length).fill(false);
-  }
-
-  if (signalTimes.length !== signals.length) {
-    throw new Error(
-      `Signal array length (${signals.length}) must match signalTimes length (${signalTimes.length})`
-    );
-  }
-
-  const resampled: boolean[] = [];
-  let signalIndex = 0;
-
-  for (const simTime of simulationTimes) {
-    // Advance to the most recent signal at or before simTime
-    while (
-      signalIndex < signalTimes.length - 1 &&
-      signalTimes[signalIndex + 1]! <= simTime
-    ) {
-      signalIndex++;
+export function resampleSignals(signals: boolean[], signalTimes: number[], simulationTimes: number[]): boolean[] {
+    if (signals.length === 0 || simulationTimes.length === 0) {
+        return new Array(simulationTimes.length).fill(false);
     }
 
-    // If simTime is before all signals, use false
-    if (simTime < signalTimes[0]!) {
-      resampled.push(false);
-    } else {
-      resampled.push(signals[signalIndex]!);
+    if (signalTimes.length !== signals.length) {
+        throw new Error(
+            `Signal array length (${signals.length}) must match signalTimes length (${signalTimes.length})`
+        );
     }
-  }
 
-  return resampled;
+    const resampled: boolean[] = [];
+    let signalIndex = 0;
+
+    for (const simTime of simulationTimes) {
+        // Advance to the most recent signal at or before simTime
+        while (signalIndex < signalTimes.length - 1 && signalTimes[signalIndex + 1]! <= simTime) {
+            signalIndex++;
+        }
+
+        // If simTime is before all signals, use false
+        if (simTime < signalTimes[0]!) {
+            resampled.push(false);
+        } else {
+            resampled.push(signals[signalIndex]!);
+        }
+    }
+
+    return resampled;
 }
 
 /**
@@ -262,15 +243,8 @@ export function resampleSignals(
  * @param resolution - Resolution between signals in seconds
  * @returns Array of timestamps
  */
-export function createSignalTimestamps(
-  startTime: number,
-  signalCount: number,
-  resolution: number
-): number[] {
-  return Array.from(
-    { length: signalCount },
-    (_, i) => startTime + i * resolution
-  );
+export function createSignalTimestamps(startTime: number, signalCount: number, resolution: number): number[] {
+    return Array.from({ length: signalCount }, (_, i) => startTime + i * resolution);
 }
 
 // =============================================================================
@@ -281,10 +255,10 @@ export function createSignalTimestamps(
  * Result from calculateIndicators that includes resolution info.
  */
 export interface IndicatorCalculationWithResolution {
-  signals: Map<string, boolean[]>;
-  signalTimes: Map<string, number[]>;
-  resolutions: Map<string, number>;
-  warmupCandles: number;
+    signals: Map<string, boolean[]>;
+    signalTimes: Map<string, number[]>;
+    resolutions: Map<string, number>;
+    warmupCandles: number;
 }
 
 /**
@@ -296,28 +270,28 @@ export interface IndicatorCalculationWithResolution {
  * @returns Resampled signal cache
  */
 export function buildResampledCache(
-  calculations: IndicatorCalculationWithResolution,
-  simulationTimes: number[],
-  simulationResolution: number
+    calculations: IndicatorCalculationWithResolution,
+    simulationTimes: number[],
+    simulationResolution: number
 ): ResampledSignalCache {
-  const resampledSignals = new Map<string, boolean[]>();
+    const resampledSignals = new Map<string, boolean[]>();
 
-  for (const [key, signals] of calculations.signals) {
-    const signalTimes = calculations.signalTimes.get(key);
+    for (const [key, signals] of calculations.signals) {
+        const signalTimes = calculations.signalTimes.get(key);
 
-    if (!signalTimes) {
-      throw new Error(`Missing signal times for indicator: ${key}`);
+        if (!signalTimes) {
+            throw new Error(`Missing signal times for indicator: ${key}`);
+        }
+
+        const resampled = resampleSignals(signals, signalTimes, simulationTimes);
+        resampledSignals.set(key, resampled);
     }
 
-    const resampled = resampleSignals(signals, signalTimes, simulationTimes);
-    resampledSignals.set(key, resampled);
-  }
-
-  return {
-    get: (key) => resampledSignals.get(key),
-    has: (key) => resampledSignals.has(key),
-    keys: () => Array.from(resampledSignals.keys()),
-    getResolution: () => simulationResolution,
-    getTimestamps: () => simulationTimes,
-  };
+    return {
+        get: (key) => resampledSignals.get(key),
+        has: (key) => resampledSignals.has(key),
+        keys: () => Array.from(resampledSignals.keys()),
+        getResolution: () => simulationResolution,
+        getTimestamps: () => simulationTimes,
+    };
 }

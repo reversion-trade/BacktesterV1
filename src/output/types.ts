@@ -12,22 +12,22 @@ import type { Direction, AlgoParams, AlgoConfig, RunSettings } from "../core/typ
 
 // Re-export event types from events module for convenience
 export type {
-  SwapEvent,
-  TradeEvent,
-  AlgoEvent,
-  IndicatorFlipEvent,
-  ConditionChangeEvent,
-  StateTransitionEvent,
-  SpecialIndicatorEvent,
-  ConditionType,
-  TransitionReason,
-  ConditionSnapshot,
-  SwapMetrics,
-  AlgoMetrics,
-  IndicatorAnalysis,
-  NearMissAnalysis,
-  ApproachSequence,
-  BacktestOutput,
+    SwapEvent,
+    TradeEvent,
+    AlgoEvent,
+    IndicatorFlipEvent,
+    ConditionChangeEvent,
+    StateTransitionEvent,
+    SpecialIndicatorEvent,
+    ConditionType,
+    TransitionReason,
+    ConditionSnapshot,
+    SwapMetrics,
+    AlgoMetrics,
+    IndicatorAnalysis,
+    NearMissAnalysis,
+    ApproachSequence,
+    BacktestOutput,
 } from "../events/types.ts";
 
 // =============================================================================
@@ -38,56 +38,56 @@ export type {
  * Why did we exit a trade?
  */
 export type ExitReason =
-  | "SIGNAL"          // Exit indicator condition was met
-  | "STOP_LOSS"       // Price hit stop loss
-  | "TAKE_PROFIT"     // Price hit take profit target
-  | "TRAILING_STOP"   // Trailing stop was triggered
-  | "END_OF_BACKTEST"; // Forced close at end of data
+    | "SIGNAL" // Exit indicator condition was met
+    | "STOP_LOSS" // Price hit stop loss
+    | "TAKE_PROFIT" // Price hit take profit target
+    | "TRAILING_STOP" // Trailing stop was triggered
+    | "END_OF_BACKTEST"; // Forced close at end of data
 
 /**
  * A complete record of one trade (entry → exit).
  * This is one row in the "List of Trades" table.
  */
 export interface TradeRecord {
-  // Identification
-  tradeId: number;
-  direction: Direction;          // "LONG" or "SHORT"
+    // Identification
+    tradeId: number;
+    direction: Direction; // "LONG" or "SHORT"
 
-  // Entry details
-  entryTime: number;             // Unix timestamp (seconds)
-  entryPrice: number;
+    // Entry details
+    entryTime: number; // Unix timestamp (seconds)
+    entryPrice: number;
 
-  // Exit details
-  exitTime: number;
-  exitPrice: number;
+    // Exit details
+    exitTime: number;
+    exitPrice: number;
 
-  // Position sizing
-  qty: number;                   // Size in base currency (e.g., 0.5 BTC)
+    // Position sizing
+    qty: number; // Size in base currency (e.g., 0.5 BTC)
 
-  // P&L
-  pnlUSD: number;                // Net profit/loss in USD
-  pnlPct: number;                // Percentage return (e.g., 0.05 = 5%)
+    // P&L
+    pnlUSD: number; // Net profit/loss in USD
+    pnlPct: number; // Percentage return (e.g., 0.05 = 5%)
 
-  // Intra-trade extremes
-  runUpUSD: number;              // Peak unrealized profit during trade
-  runUpPct: number;              // Peak unrealized profit as percentage
-  drawdownUSD: number;           // Worst unrealized loss during trade (positive number)
-  drawdownPct: number;           // Worst unrealized loss as percentage
+    // Intra-trade extremes
+    runUpUSD: number; // Peak unrealized profit during trade
+    runUpPct: number; // Peak unrealized profit as percentage
+    drawdownUSD: number; // Worst unrealized loss during trade (positive number)
+    drawdownPct: number; // Worst unrealized loss as percentage
 
-  // Duration
-  durationSeconds: number;       // How long trade was open
-  durationBars: number;          // How many candles trade was open
+    // Duration
+    durationSeconds: number; // How long trade was open
+    durationBars: number; // How many candles trade was open
 
-  // Running totals (for cumulative analysis)
-  cumulativePnlUSD: number;      // Total P&L up to and including this trade
-  equityAfterTrade: number;      // Portfolio value after this trade closed
+    // Running totals (for cumulative analysis)
+    cumulativePnlUSD: number; // Total P&L up to and including this trade
+    equityAfterTrade: number; // Portfolio value after this trade closed
 
-  // Exit info
-  exitReason: ExitReason;
+    // Exit info
+    exitReason: ExitReason;
 
-  // Risk management (what was set, not what triggered)
-  stopLossPrice?: number;
-  takeProfitPrice?: number;
+    // Risk management (what was set, not what triggered)
+    stopLossPrice?: number;
+    takeProfitPrice?: number;
 }
 
 // =============================================================================
@@ -99,10 +99,10 @@ export interface TradeRecord {
  * Tracks portfolio value over time.
  */
 export interface EquityPoint {
-  time: number;          // Unix timestamp
-  equity: number;        // Portfolio value in USD
-  drawdownPct: number;   // Current drawdown from peak (as decimal, e.g., 0.05 = 5%)
-  runupPct: number;      // Current runup from trough (as decimal)
+    time: number; // Unix timestamp
+    equity: number; // Portfolio value in USD
+    drawdownPct: number; // Current drawdown from peak (as decimal, e.g., 0.05 = 5%)
+    runupPct: number; // Current runup from trough (as decimal)
 }
 
 // =============================================================================
@@ -114,15 +114,15 @@ export interface EquityPoint {
  * Quick snapshot of strategy performance.
  */
 export interface SummaryMetrics {
-  totalPnlUSD: number;           // Total profit/loss
-  maxEquityDrawdownPct: number;  // Largest peak-to-trough decline
-  maxEquityRunupPct: number;     // Largest trough-to-peak rise
-  numberOfTrades: number;        // Total completed trades
-  winRate: number;               // Winners / total (e.g., 0.55 = 55%)
-  sharpeRatio: number;           // Risk-adjusted return (higher = better)
-  sortinoRatio: number;          // Like Sharpe but only penalizes downside
-  largestWinUSD: number;         // Best single trade
-  largestLossUSD: number;        // Worst single trade (positive number)
+    totalPnlUSD: number; // Total profit/loss
+    maxEquityDrawdownPct: number; // Largest peak-to-trough decline
+    maxEquityRunupPct: number; // Largest trough-to-peak rise
+    numberOfTrades: number; // Total completed trades
+    winRate: number; // Winners / total (e.g., 0.55 = 55%)
+    sharpeRatio: number; // Risk-adjusted return (higher = better)
+    sortinoRatio: number; // Like Sharpe but only penalizes downside
+    largestWinUSD: number; // Best single trade
+    largestLossUSD: number; // Worst single trade (positive number)
 }
 
 // =============================================================================
@@ -133,9 +133,9 @@ export interface SummaryMetrics {
  * Breakdown of a metric by direction (total, long, short).
  */
 export interface ByDirection {
-  total: number;
-  long: number;
-  short: number;
+    total: number;
+    long: number;
+    short: number;
 }
 
 /**
@@ -143,9 +143,9 @@ export interface ByDirection {
  * Shows where profits/losses came from.
  */
 export interface PerformanceMetrics {
-  netProfit: ByDirection;        // Profit after fees
-  grossProfit: ByDirection;      // Sum of all winning trades
-  grossLoss: ByDirection;        // Sum of all losing trades (positive number)
+    netProfit: ByDirection; // Profit after fees
+    grossProfit: ByDirection; // Sum of all winning trades
+    grossLoss: ByDirection; // Sum of all losing trades (positive number)
 }
 
 // =============================================================================
@@ -156,47 +156,47 @@ export interface PerformanceMetrics {
  * A metric broken down by direction for longs and shorts.
  */
 export interface LongShortBreakdown {
-  long: number;
-  short: number;
+    long: number;
+    short: number;
 }
 
 /**
  * Trade Statistics Subcategory
  */
 export interface TradeStatistics {
-  totalTrades: number;
-  winningTradesCount: LongShortBreakdown;
-  losingTradesCount: LongShortBreakdown;
-  percentProfitable: LongShortBreakdown;   // Win rate by direction (e.g., 0.55 = 55%)
+    totalTrades: number;
+    winningTradesCount: LongShortBreakdown;
+    losingTradesCount: LongShortBreakdown;
+    percentProfitable: LongShortBreakdown; // Win rate by direction (e.g., 0.55 = 55%)
 }
 
 /**
  * Profit & Loss Subcategory
  */
 export interface PnLAnalysis {
-  avgPnl: LongShortBreakdown;              // Average P&L per trade
-  avgWinningTrade: LongShortBreakdown;     // Average profit on winners
-  avgLosingTrade: LongShortBreakdown;      // Average loss on losers (positive number)
-  largestWinningTrade: LongShortBreakdown; // Best trade
-  largestLosingTrade: LongShortBreakdown;  // Worst trade (positive number)
+    avgPnl: LongShortBreakdown; // Average P&L per trade
+    avgWinningTrade: LongShortBreakdown; // Average profit on winners
+    avgLosingTrade: LongShortBreakdown; // Average loss on losers (positive number)
+    largestWinningTrade: LongShortBreakdown; // Best trade
+    largestLosingTrade: LongShortBreakdown; // Worst trade (positive number)
 }
 
 /**
  * Trade Duration Subcategory
  */
 export interface DurationAnalysis {
-  avgTradeDurationBars: LongShortBreakdown;        // Average holding period
-  avgWinningTradeDurationBars: LongShortBreakdown; // Winners held longer or shorter?
-  avgLosingTradeDurationBars: LongShortBreakdown;  // Losers held longer or shorter?
+    avgTradeDurationBars: LongShortBreakdown; // Average holding period
+    avgWinningTradeDurationBars: LongShortBreakdown; // Winners held longer or shorter?
+    avgLosingTradeDurationBars: LongShortBreakdown; // Losers held longer or shorter?
 }
 
 /**
  * Complete trades analysis (Category 4).
  */
 export interface TradesAnalysis {
-  statistics: TradeStatistics;
-  profitLoss: PnLAnalysis;
-  duration: DurationAnalysis;
+    statistics: TradeStatistics;
+    profitLoss: PnLAnalysis;
+    duration: DurationAnalysis;
 }
 
 // =============================================================================
@@ -207,31 +207,31 @@ export interface TradesAnalysis {
  * Extra metrics useful for analysis but not in the 4 main categories.
  */
 export interface AdditionalMetrics {
-  // Risk metrics
-  calmarRatio: number;           // Annual return / max drawdown
-  profitFactor: number;          // Gross profit / gross loss
-  expectancy: number;            // Average expected profit per trade
+    // Risk metrics
+    calmarRatio: number; // Annual return / max drawdown
+    profitFactor: number; // Gross profit / gross loss
+    expectancy: number; // Average expected profit per trade
 
-  // Volatility
-  dailyVolatility: number;       // Standard deviation of daily returns
-  annualizedVolatility: number;  // Daily vol * sqrt(365)
+    // Volatility
+    dailyVolatility: number; // Standard deviation of daily returns
+    annualizedVolatility: number; // Daily vol * sqrt(365)
 
-  // Drawdown details
-  maxDrawdownUSD: number;        // Largest decline in USD
-  maxDrawdownDurationSeconds: number; // Longest time in drawdown
+    // Drawdown details
+    maxDrawdownUSD: number; // Largest decline in USD
+    maxDrawdownDurationSeconds: number; // Longest time in drawdown
 
-  // Activity
-  tradesPerDay: number;          // Trading frequency
-  annualizedReturnPct: number;   // Return scaled to 1 year
+    // Activity
+    tradesPerDay: number; // Trading frequency
+    annualizedReturnPct: number; // Return scaled to 1 year
 
-  // Exit breakdown
-  exitsByReason: {
-    SIGNAL: number;
-    STOP_LOSS: number;
-    TAKE_PROFIT: number;
-    TRAILING_STOP: number;
-    END_OF_BACKTEST: number;
-  };
+    // Exit breakdown
+    exitsByReason: {
+        SIGNAL: number;
+        STOP_LOSS: number;
+        TAKE_PROFIT: number;
+        TRAILING_STOP: number;
+        END_OF_BACKTEST: number;
+    };
 }
 
 // =============================================================================
@@ -243,13 +243,13 @@ export interface AdditionalMetrics {
  * Stored in results so you know what parameters produced these metrics.
  */
 export interface BacktestConfig {
-  coinSymbol: string;            // e.g., "BTC", "ETH"
-  startTime: number;             // Backtest start (Unix timestamp)
-  endTime: number;               // Backtest end (Unix timestamp)
-  startingCapitalUSD: number;    // Initial portfolio value
-  feeBps: number;                // Trading fee in basis points
-  slippageBps: number;           // Slippage in basis points
-  algoParams: AlgoParams;        // The algorithm being tested
+    coinSymbol: string; // e.g., "BTC", "ETH"
+    startTime: number; // Backtest start (Unix timestamp)
+    endTime: number; // Backtest end (Unix timestamp)
+    startingCapitalUSD: number; // Initial portfolio value
+    feeBps: number; // Trading fee in basis points
+    slippageBps: number; // Slippage in basis points
+    algoParams: AlgoParams; // The algorithm being tested
 }
 
 // =============================================================================
@@ -261,28 +261,28 @@ export interface BacktestConfig {
  * Organized into 4 categories plus supporting data.
  */
 export interface BacktestResult {
-  // What was tested
-  config: BacktestConfig;
+    // What was tested
+    config: BacktestConfig;
 
-  // Category 1: Summary
-  summary: SummaryMetrics;
+    // Category 1: Summary
+    summary: SummaryMetrics;
 
-  // Category 2: Performance
-  performance: PerformanceMetrics;
+    // Category 2: Performance
+    performance: PerformanceMetrics;
 
-  // Category 3: List of Trades
-  trades: TradeRecord[];
+    // Category 3: List of Trades
+    trades: TradeRecord[];
 
-  // Category 4: Trades Analysis
-  analysis: TradesAnalysis;
+    // Category 4: Trades Analysis
+    analysis: TradesAnalysis;
 
-  // Supporting data
-  additional: AdditionalMetrics;
-  equityCurve: EquityPoint[];
+    // Supporting data
+    additional: AdditionalMetrics;
+    equityCurve: EquityPoint[];
 
-  // Meta
-  completedAt: number;           // When backtest finished (Unix timestamp)
-  durationMs: number;            // How long the backtest took to run
+    // Meta
+    completedAt: number; // When backtest finished (Unix timestamp)
+    durationMs: number; // How long the backtest took to run
 }
 
 // =============================================================================
@@ -293,15 +293,15 @@ export interface BacktestResult {
  * Configuration for new event-based backtest output.
  */
 export interface BacktestOutputConfig {
-  algoId: string;
-  algoName: string;
-  version: number;
-  symbol: string;
-  startTime: number;
-  endTime: number;
-  startingCapitalUSD: number;
-  feeBps: number;
-  slippageBps: number;
-  algoConfig?: AlgoConfig;
-  runSettings?: RunSettings;
+    algoId: string;
+    algoName: string;
+    version: number;
+    symbol: string;
+    startTime: number;
+    endTime: number;
+    startingCapitalUSD: number;
+    feeBps: number;
+    slippageBps: number;
+    algoConfig?: AlgoConfig;
+    runSettings?: RunSettings;
 }

@@ -8,9 +8,9 @@
  * Calculate sum of an array of numbers.
  */
 export function sum(values: number[]): number {
-  let total = 0;
-  for (const v of values) total += v;
-  return total;
+    let total = 0;
+    for (const v of values) total += v;
+    return total;
 }
 
 /**
@@ -18,8 +18,8 @@ export function sum(values: number[]): number {
  * Returns 0 for empty arrays.
  */
 export function mean(values: number[]): number {
-  if (values.length === 0) return 0;
-  return sum(values) / values.length;
+    if (values.length === 0) return 0;
+    return sum(values) / values.length;
 }
 
 /**
@@ -27,14 +27,14 @@ export function mean(values: number[]): number {
  * Returns 0 for empty arrays.
  */
 export function stddevPopulation(values: number[]): number {
-  if (values.length === 0) return 0;
-  const m = mean(values);
-  let sumSq = 0;
-  for (const v of values) {
-    const d = v - m;
-    sumSq += d * d;
-  }
-  return Math.sqrt(sumSq / values.length);
+    if (values.length === 0) return 0;
+    const m = mean(values);
+    let sumSq = 0;
+    for (const v of values) {
+        const d = v - m;
+        sumSq += d * d;
+    }
+    return Math.sqrt(sumSq / values.length);
 }
 
 /**
@@ -42,14 +42,14 @@ export function stddevPopulation(values: number[]): number {
  * Returns 0 for arrays with fewer than 2 elements.
  */
 export function stddevSample(values: number[]): number {
-  if (values.length < 2) return 0;
-  const m = mean(values);
-  let sumSq = 0;
-  for (const v of values) {
-    const d = v - m;
-    sumSq += d * d;
-  }
-  return Math.sqrt(sumSq / (values.length - 1));
+    if (values.length < 2) return 0;
+    const m = mean(values);
+    let sumSq = 0;
+    for (const v of values) {
+        const d = v - m;
+        sumSq += d * d;
+    }
+    return Math.sqrt(sumSq / (values.length - 1));
 }
 
 /**
@@ -57,12 +57,12 @@ export function stddevSample(values: number[]): number {
  * Returns Infinity for empty arrays.
  */
 export function min(values: number[]): number {
-  if (values.length === 0) return Infinity;
-  let result = values[0]!;
-  for (let i = 1; i < values.length; i++) {
-    if (values[i]! < result) result = values[i]!;
-  }
-  return result;
+    if (values.length === 0) return Infinity;
+    let result = values[0]!;
+    for (let i = 1; i < values.length; i++) {
+        if (values[i]! < result) result = values[i]!;
+    }
+    return result;
 }
 
 /**
@@ -70,10 +70,10 @@ export function min(values: number[]): number {
  * Returns -Infinity for empty arrays.
  */
 export function max(values: number[]): number {
-  if (values.length === 0) return -Infinity;
-  let result = values[0]!;
-  for (let i = 1; i < values.length; i++) {
-    if (values[i]! > result) result = values[i]!;
-  }
-  return result;
+    if (values.length === 0) return -Infinity;
+    let result = values[0]!;
+    for (let i = 1; i < values.length; i++) {
+        if (values[i]! > result) result = values[i]!;
+    }
+    return result;
 }

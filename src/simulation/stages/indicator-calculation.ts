@@ -29,10 +29,7 @@
 
 import type { Candle, AlgoParams, IndicatorConfig } from "../../core/types.ts";
 import type { SignalCache, CalculationResult } from "../../indicators/calculator.ts";
-import {
-  calculateIndicators,
-  collectIndicatorConfigs,
-} from "../../indicators/calculator.ts";
+import { calculateIndicators, collectIndicatorConfigs } from "../../indicators/calculator.ts";
 import type { DataLoadingResult } from "./data-loading.ts";
 
 // =============================================================================
@@ -45,20 +42,20 @@ import type { DataLoadingResult } from "./data-loading.ts";
  * Contains pre-calculated signals ready for simulation or resampling.
  */
 export interface IndicatorCalculationResult {
-  /** Pre-calculated signal cache keyed by indicator cache key */
-  signalCache: SignalCache;
+    /** Pre-calculated signal cache keyed by indicator cache key */
+    signalCache: SignalCache;
 
-  /** Maximum warmup period across all indicators (in candles) */
-  warmupCandles: number;
+    /** Maximum warmup period across all indicators (in candles) */
+    warmupCandles: number;
 
-  /** All indicator configurations extracted from algo params */
-  indicatorConfigs: IndicatorConfig[];
+    /** All indicator configurations extracted from algo params */
+    indicatorConfigs: IndicatorConfig[];
 
-  /** Number of unique indicators (after deduplication) */
-  uniqueIndicatorCount: number;
+    /** Number of unique indicators (after deduplication) */
+    uniqueIndicatorCount: number;
 
-  /** Indicator cache keys for debugging/auditing */
-  indicatorKeys: string[];
+    /** Indicator cache keys for debugging/auditing */
+    indicatorKeys: string[];
 }
 
 /**
@@ -66,11 +63,11 @@ export interface IndicatorCalculationResult {
  * Can be constructed from Stage 1 result or manually for testing.
  */
 export interface IndicatorCalculationInput {
-  /** Candles to calculate indicators over */
-  candles: Candle[];
+    /** Candles to calculate indicators over */
+    candles: Candle[];
 
-  /** Algorithm parameters containing indicator configs */
-  algoParams: AlgoParams;
+    /** Algorithm parameters containing indicator configs */
+    algoParams: AlgoParams;
 }
 
 // =============================================================================
@@ -99,31 +96,26 @@ export interface IndicatorCalculationInput {
  * This function wraps the existing calculateIndicators() from calculator.ts.
  * It adds metadata tracking for auditability (config count, key list, etc.).
  */
-export function executeIndicatorCalculation(
-  input: IndicatorCalculationInput
-): IndicatorCalculationResult {
-  const { candles, algoParams } = input;
+export function executeIndicatorCalculation(input: IndicatorCalculationInput): IndicatorCalculationResult {
+    const { candles, algoParams } = input;
 
-  // Step 1: Extract all indicator configs from algo parameters
-  const indicatorConfigs = collectIndicatorConfigs(algoParams);
+    // Step 1: Extract all indicator configs from algo parameters
+    const indicatorConfigs = collectIndicatorConfigs(algoParams);
 
-  // Step 2: Calculate all indicators (deduplication happens internally)
-  const { signals: signalCache, warmupCandles } = calculateIndicators(
-    candles,
-    indicatorConfigs
-  );
+    // Step 2: Calculate all indicators (deduplication happens internally)
+    const { signals: signalCache, warmupCandles } = calculateIndicators(candles, indicatorConfigs);
 
-  // Step 3: Gather metadata for auditing
-  const indicatorKeys = signalCache.keys();
-  const uniqueIndicatorCount = indicatorKeys.length;
+    // Step 3: Gather metadata for auditing
+    const indicatorKeys = signalCache.keys();
+    const uniqueIndicatorCount = indicatorKeys.length;
 
-  return {
-    signalCache,
-    warmupCandles,
-    indicatorConfigs,
-    uniqueIndicatorCount,
-    indicatorKeys,
-  };
+    return {
+        signalCache,
+        warmupCandles,
+        indicatorConfigs,
+        uniqueIndicatorCount,
+        indicatorKeys,
+    };
 }
 
 /**
@@ -134,13 +126,11 @@ export function executeIndicatorCalculation(
  * @param dataResult - Result from Stage 1
  * @returns Input for Stage 2
  */
-export function createIndicatorInputFromDataResult(
-  dataResult: DataLoadingResult
-): IndicatorCalculationInput {
-  return {
-    candles: dataResult.filteredCandles,
-    algoParams: dataResult.validatedInput.algoConfig.params,
-  };
+export function createIndicatorInputFromDataResult(dataResult: DataLoadingResult): IndicatorCalculationInput {
+    return {
+        candles: dataResult.filteredCandles,
+        algoParams: dataResult.validatedInput.algoConfig.params,
+    };
 }
 
 // =============================================================================
@@ -156,47 +146,47 @@ export function createIndicatorInputFromDataResult(
  * @returns Validation report
  */
 export function validateIndicatorResult(result: IndicatorCalculationResult): {
-  isValid: boolean;
-  issues: string[];
-  summary: {
-    configCount: number;
-    uniqueCount: number;
-    warmupCandles: number;
-    duplicatesRemoved: number;
-  };
-} {
-  const issues: string[] = [];
-
-  // Check for empty results
-  if (result.indicatorConfigs.length === 0) {
-    issues.push("No indicator configurations found");
-  }
-
-  // Check signal cache consistency
-  for (const key of result.indicatorKeys) {
-    const signals = result.signalCache.get(key);
-    if (!signals) {
-      issues.push(`Missing signals for key: ${key}`);
-    } else if (signals.length === 0) {
-      issues.push(`Empty signal array for key: ${key}`);
-    }
-  }
-
-  // Check warmup is reasonable
-  if (result.warmupCandles < 0) {
-    issues.push(`Invalid warmup candles: ${result.warmupCandles}`);
-  }
-
-  return {
-    isValid: issues.length === 0,
-    issues,
+    isValid: boolean;
+    issues: string[];
     summary: {
-      configCount: result.indicatorConfigs.length,
-      uniqueCount: result.uniqueIndicatorCount,
-      warmupCandles: result.warmupCandles,
-      duplicatesRemoved: result.indicatorConfigs.length - result.uniqueIndicatorCount,
-    },
-  };
+        configCount: number;
+        uniqueCount: number;
+        warmupCandles: number;
+        duplicatesRemoved: number;
+    };
+} {
+    const issues: string[] = [];
+
+    // Check for empty results
+    if (result.indicatorConfigs.length === 0) {
+        issues.push("No indicator configurations found");
+    }
+
+    // Check signal cache consistency
+    for (const key of result.indicatorKeys) {
+        const signals = result.signalCache.get(key);
+        if (!signals) {
+            issues.push(`Missing signals for key: ${key}`);
+        } else if (signals.length === 0) {
+            issues.push(`Empty signal array for key: ${key}`);
+        }
+    }
+
+    // Check warmup is reasonable
+    if (result.warmupCandles < 0) {
+        issues.push(`Invalid warmup candles: ${result.warmupCandles}`);
+    }
+
+    return {
+        isValid: issues.length === 0,
+        issues,
+        summary: {
+            configCount: result.indicatorConfigs.length,
+            uniqueCount: result.uniqueIndicatorCount,
+            warmupCandles: result.warmupCandles,
+            duplicatesRemoved: result.indicatorConfigs.length - result.uniqueIndicatorCount,
+        },
+    };
 }
 
 /**
@@ -209,14 +199,10 @@ export function validateIndicatorResult(result: IndicatorCalculationResult): {
  * @param barIndex - Candle index
  * @returns Signal value or undefined if not found
  */
-export function getSignalAtBar(
-  signalCache: SignalCache,
-  key: string,
-  barIndex: number
-): boolean | undefined {
-  const signals = signalCache.get(key);
-  if (!signals || barIndex < 0 || barIndex >= signals.length) {
-    return undefined;
-  }
-  return signals[barIndex];
+export function getSignalAtBar(signalCache: SignalCache, key: string, barIndex: number): boolean | undefined {
+    const signals = signalCache.get(key);
+    if (!signals || barIndex < 0 || barIndex >= signals.length) {
+        return undefined;
+    }
+    return signals[barIndex];
 }

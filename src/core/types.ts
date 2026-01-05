@@ -61,14 +61,14 @@ export type OrderType = "MARKET" | "TWAP" | "SMART" | "LIMIT";
  * Used to create multiple levels at different price offsets.
  */
 export interface LadderParams {
-  /** Map of <offset, weight> in percent */
-  levels: Record<number, number>;
-  /** Expected offset sign(s) */
-  direction: "UP" | "DOWN" | "CENTER";
-  /** Whether to remove levels beyond limit (CLAMP) or scale proportionally (SCALE) */
-  method: "CLAMP" | "SCALE";
-  /** Whether to require all weights to be normalized (false for pyramiding) */
-  normalize: boolean;
+    /** Map of <offset, weight> in percent */
+    levels: Record<number, number>;
+    /** Expected offset sign(s) */
+    direction: "UP" | "DOWN" | "CENTER";
+    /** Whether to remove levels beyond limit (CLAMP) or scale proportionally (SCALE) */
+    method: "CLAMP" | "SCALE";
+    /** Whether to require all weights to be normalized (false for pyramiding) */
+    normalize: boolean;
 }
 
 // =============================================================================
@@ -93,16 +93,16 @@ export type ValueType = "ABS" | "REL" | "DYN";
  *   { type: "DYN", value: 0.05, valueFactor: {...} } → 5% modulated by indicator
  */
 export interface ValueConfig {
-  /** Applicable to both price levels and position sizes */
-  type: ValueType;
-  /** USD price or amount if type=ABS, percent otherwise */
-  value: number;
-  /** Single-use value-modulating indicator (if type=DYN) */
-  valueFactor?: IndicatorConfig;
-  /** Scale up (position size) or down (stop loss) based on indicator's value */
-  inverted?: boolean;
-  /** Persistent set of levels generated after value * valueFactor evaluation */
-  ladder?: LadderParams;
+    /** Applicable to both price levels and position sizes */
+    type: ValueType;
+    /** USD price or amount if type=ABS, percent otherwise */
+    value: number;
+    /** Single-use value-modulating indicator (if type=DYN) */
+    valueFactor?: IndicatorConfig;
+    /** Scale up (position size) or down (stop loss) based on indicator's value */
+    inverted?: boolean;
+    /** Persistent set of levels generated after value * valueFactor evaluation */
+    ladder?: LadderParams;
 }
 
 // =============================================================================
@@ -117,10 +117,10 @@ export interface ValueConfig {
  *        + if optional is empty, required alone is sufficient
  */
 export interface EntryCondition {
-  /** All required indicators must be true for condition to be true */
-  required: IndicatorConfig[];
-  /** At least one optional indicator must be true for condition to be true */
-  optional: IndicatorConfig[];
+    /** All required indicators must be true for condition to be true */
+    required: IndicatorConfig[];
+    /** At least one optional indicator must be true for condition to be true */
+    optional: IndicatorConfig[];
 }
 
 /**
@@ -133,16 +133,16 @@ export interface EntryCondition {
  * 4. Trailing stop (price drops from peak)
  */
 export interface ExitCondition {
-  /** All required indicators must be true for condition to be true */
-  required: IndicatorConfig[];
-  /** At least one optional indicator must be true for condition to be true */
-  optional: IndicatorConfig[];
-  /** Relative to entry price if type=REL/DYN */
-  stopLoss?: ValueConfig;
-  /** Relative to entry price if type=REL/DYN */
-  takeProfit?: ValueConfig;
-  /** Available only when stopLoss is set */
-  trailingSL?: boolean;
+    /** All required indicators must be true for condition to be true */
+    required: IndicatorConfig[];
+    /** At least one optional indicator must be true for condition to be true */
+    optional: IndicatorConfig[];
+    /** Relative to entry price if type=REL/DYN */
+    stopLoss?: ValueConfig;
+    /** Relative to entry price if type=REL/DYN */
+    takeProfit?: ValueConfig;
+    /** Available only when stopLoss is set */
+    trailingSL?: boolean;
 }
 
 // =============================================================================
@@ -157,24 +157,24 @@ export interface ExitCondition {
  * have moved to RunSettings to separate algo definition from execution config.
  */
 export interface AlgoParams {
-  /** What directions can this algo trade? */
-  type: AlgoType;
-  /** Entry conditions for long trades */
-  longEntry?: EntryCondition;
-  /** Exit conditions for long trades */
-  longExit?: ExitCondition;
-  /** Entry conditions for short trades */
-  shortEntry?: EntryCondition;
-  /** Exit conditions for short trades */
-  shortExit?: ExitCondition;
-  /** Becomes mandatory if stopLoss/takeProfit.type=ABS */
-  coinSymbol?: string;
-  /** Relative to currentCapitalUSD if type=REL/DYN (starts with startingCapitalUSD) */
-  positionSize: ValueConfig;
-  /** Speed vs fill rate/probability trade-off */
-  orderType: OrderType;
-  /** Initial capital for REL/DYN position sizing, or minimum capital for ABS sizing */
-  startingCapitalUSD: number;
+    /** What directions can this algo trade? */
+    type: AlgoType;
+    /** Entry conditions for long trades */
+    longEntry?: EntryCondition;
+    /** Exit conditions for long trades */
+    longExit?: ExitCondition;
+    /** Entry conditions for short trades */
+    shortEntry?: EntryCondition;
+    /** Exit conditions for short trades */
+    shortExit?: ExitCondition;
+    /** Becomes mandatory if stopLoss/takeProfit.type=ABS */
+    coinSymbol?: string;
+    /** Relative to currentCapitalUSD if type=REL/DYN (starts with startingCapitalUSD) */
+    positionSize: ValueConfig;
+    /** Speed vs fill rate/probability trade-off */
+    orderType: OrderType;
+    /** Initial capital for REL/DYN position sizing, or minimum capital for ABS sizing */
+    startingCapitalUSD: number;
 }
 
 // =============================================================================
@@ -186,13 +186,13 @@ export interface AlgoParams {
  * AlgoParams are read-only - new versions must be created for changes.
  */
 export interface AlgoConfig {
-  userID: string;
-  algoID: string;
-  algoName: string;
-  /** AlgoParams are read-only, new versions needed to record changes */
-  version: number;
-  /** All risk/win rate defining parameters */
-  params: AlgoParams;
+    userID: string;
+    algoID: string;
+    algoName: string;
+    /** AlgoParams are read-only, new versions needed to record changes */
+    version: number;
+    /** All risk/win rate defining parameters */
+    params: AlgoParams;
 }
 
 // =============================================================================
@@ -204,33 +204,33 @@ export interface AlgoConfig {
  * Separates execution config from algorithm definition.
  */
 export interface RunSettings {
-  userID: string;
-  /** A pair of algoID + version reference a unique read-only AlgoConfig */
-  algoID: string;
-  version: string;
-  runID: string;
-  /** Whether this is a live trading algo or a backtest simulation */
-  isBacktest: boolean;
-  /** Autofilled with AlgoParams.coinSymbol if set there (cannot be overridden) */
-  coinSymbol: string;
-  /** Scales AlgoParams.startingCapitalUSD (and positionSize if type=ABS). Defaults to 1 */
-  capitalScaler: number;
-  /** Unix timestamp (seconds) - required if isBacktest=true or assumePositionImmediately=false */
-  startTime?: number;
-  /** Unix timestamp (seconds) - required if isBacktest=true or closePositionOnExit=true */
-  endTime?: number;
-  /** Auto-stop after reaching certain number of trades */
-  tradesLimit?: number;
-  /** Enter on first signal without waiting (NEW -> RUNNING transition) */
-  assumePositionImmediately: boolean;
-  /** Force close when algo stops (RUNNING -> DONE transition) */
-  closePositionOnExit: boolean;
-  /** Unix timestamp (seconds) of when the run was submitted */
-  launchTime: number;
-  /** Algo/Backtesting services are responsible for progressing the status */
-  status: RunStatus;
-  /** Exchange identifier (Hyperliquid, KuCoin, etc.) */
-  exchangeID: string;
+    userID: string;
+    /** A pair of algoID + version reference a unique read-only AlgoConfig */
+    algoID: string;
+    version: string;
+    runID: string;
+    /** Whether this is a live trading algo or a backtest simulation */
+    isBacktest: boolean;
+    /** Autofilled with AlgoParams.coinSymbol if set there (cannot be overridden) */
+    coinSymbol: string;
+    /** Scales AlgoParams.startingCapitalUSD (and positionSize if type=ABS). Defaults to 1 */
+    capitalScaler: number;
+    /** Unix timestamp (seconds) - required if isBacktest=true or assumePositionImmediately=false */
+    startTime?: number;
+    /** Unix timestamp (seconds) - required if isBacktest=true or closePositionOnExit=true */
+    endTime?: number;
+    /** Auto-stop after reaching certain number of trades */
+    tradesLimit?: number;
+    /** Enter on first signal without waiting (NEW -> RUNNING transition) */
+    assumePositionImmediately: boolean;
+    /** Force close when algo stops (RUNNING -> DONE transition) */
+    closePositionOnExit: boolean;
+    /** Unix timestamp (seconds) of when the run was submitted */
+    launchTime: number;
+    /** Algo/Backtesting services are responsible for progressing the status */
+    status: RunStatus;
+    /** Exchange identifier (Hyperliquid, KuCoin, etc.) */
+    exchangeID: string;
 }
 
 // =============================================================================
@@ -240,24 +240,24 @@ export interface RunSettings {
 // Trade records, equity tracking, and metrics are in src/output/types.ts
 // Re-export them here for convenience
 export type {
-  // Trade records
-  ExitReason,
-  TradeRecord,
-  EquityPoint,
-  // Category 1: Summary
-  SummaryMetrics,
-  // Category 2: Performance
-  ByDirection,
-  PerformanceMetrics,
-  // Category 4: Trades Analysis
-  LongShortBreakdown,
-  TradeStatistics,
-  PnLAnalysis,
-  DurationAnalysis,
-  TradesAnalysis,
-  // Additional
-  AdditionalMetrics,
-  // Final result
-  BacktestConfig as OutputBacktestConfig,
-  BacktestResult,
+    // Trade records
+    ExitReason,
+    TradeRecord,
+    EquityPoint,
+    // Category 1: Summary
+    SummaryMetrics,
+    // Category 2: Performance
+    ByDirection,
+    PerformanceMetrics,
+    // Category 4: Trades Analysis
+    LongShortBreakdown,
+    TradeStatistics,
+    PnLAnalysis,
+    DurationAnalysis,
+    TradesAnalysis,
+    // Additional
+    AdditionalMetrics,
+    // Final result
+    BacktestConfig as OutputBacktestConfig,
+    BacktestResult,
 } from "../output/types.ts";

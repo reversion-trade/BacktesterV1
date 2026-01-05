@@ -22,26 +22,12 @@
  * - Purpose: Implement environment-agnostic trading logic using injected interfaces
  */
 
-import type {
-  Candle,
-  AlgoParams,
-  Direction,
-  PositionState,
-} from "../core/types.ts";
+import type { Candle, AlgoParams, Direction, PositionState } from "../core/types.ts";
 import type { IExecutor, Position } from "../interfaces/executor.ts";
 import type { IDatabase } from "../interfaces/database.ts";
 import type { IIndicatorFeed } from "../interfaces/indicator-feed.ts";
-import type {
-  ConditionType,
-  StateTransitionEvent,
-  ConditionChangeEvent,
-  IndicatorFlipEvent,
-} from "../events/types.ts";
-import {
-  StopLossIndicator,
-  TakeProfitIndicator,
-  TrailingStopIndicator,
-} from "./special-indicators/index.ts";
+import type { ConditionType, StateTransitionEvent, ConditionChangeEvent, IndicatorFlipEvent } from "../events/types.ts";
+import { StopLossIndicator, TakeProfitIndicator, TrailingStopIndicator } from "./special-indicators/index.ts";
 import type { IndicatorFlip } from "./fakes/pre-calculated-feed.ts";
 
 // =============================================================================
@@ -52,51 +38,51 @@ import type { IndicatorFlip } from "./fakes/pre-calculated-feed.ts";
  * Configuration for AlgoRunner.
  */
 export interface AlgoRunnerConfig {
-  /** Algorithm parameters */
-  algoParams: AlgoParams;
-  /** Asset symbol */
-  symbol: string;
-  /** Enter on first signal without waiting for edge */
-  assumePositionImmediately?: boolean;
-  /** Maximum trades allowed (undefined = unlimited) */
-  tradesLimit?: number;
-  /** Number of warmup bars to skip */
-  warmupBars?: number;
+    /** Algorithm parameters */
+    algoParams: AlgoParams;
+    /** Asset symbol */
+    symbol: string;
+    /** Enter on first signal without waiting for edge */
+    assumePositionImmediately?: boolean;
+    /** Maximum trades allowed (undefined = unlimited) */
+    tradesLimit?: number;
+    /** Number of warmup bars to skip */
+    warmupBars?: number;
 }
 
 /**
  * Result of processing a single bar.
  */
 export interface BarResult {
-  /** Bar index processed */
-  barIndex: number;
-  /** Timestamp of bar */
-  timestamp: number;
-  /** Current position state after processing */
-  positionState: PositionState;
-  /** Whether an entry occurred */
-  entryOccurred: boolean;
-  /** Whether an exit occurred */
-  exitOccurred: boolean;
-  /** Current equity */
-  equity: number;
+    /** Bar index processed */
+    barIndex: number;
+    /** Timestamp of bar */
+    timestamp: number;
+    /** Current position state after processing */
+    positionState: PositionState;
+    /** Whether an entry occurred */
+    entryOccurred: boolean;
+    /** Whether an exit occurred */
+    exitOccurred: boolean;
+    /** Current equity */
+    equity: number;
 }
 
 /**
  * State tracked by the algo runner.
  */
 interface AlgoState {
-  positionState: PositionState;
-  tradeCount: number;
-  currentBarIndex: number;
-  /** Active stop loss indicator (created on entry) */
-  stopLoss: StopLossIndicator | null;
-  /** Active take profit indicator (created on entry) */
-  takeProfit: TakeProfitIndicator | null;
-  /** Active trailing stop indicator (created on entry) */
-  trailingStop: TrailingStopIndicator | null;
-  /** Entry price of current position */
-  entryPrice: number;
+    positionState: PositionState;
+    tradeCount: number;
+    currentBarIndex: number;
+    /** Active stop loss indicator (created on entry) */
+    stopLoss: StopLossIndicator | null;
+    /** Active take profit indicator (created on entry) */
+    takeProfit: TakeProfitIndicator | null;
+    /** Active trailing stop indicator (created on entry) */
+    trailingStop: TrailingStopIndicator | null;
+    /** Entry price of current position */
+    entryPrice: number;
 }
 
 // =============================================================================
@@ -138,469 +124,411 @@ interface AlgoState {
  * ```
  */
 export class AlgoRunner {
-  private executor: IExecutor;
-  private database: IDatabase;
-  private indicatorFeed: IIndicatorFeed;
-  private config: AlgoRunnerConfig;
-  private state: AlgoState;
+    private executor: IExecutor;
+    private database: IDatabase;
+    private indicatorFeed: IIndicatorFeed;
+    private config: AlgoRunnerConfig;
+    private state: AlgoState;
 
-  constructor(
-    executor: IExecutor,
-    database: IDatabase,
-    indicatorFeed: IIndicatorFeed,
-    config: AlgoRunnerConfig
-  ) {
-    this.executor = executor;
-    this.database = database;
-    this.indicatorFeed = indicatorFeed;
-    this.config = {
-      assumePositionImmediately: false,
-      warmupBars: 0,
-      ...config,
-    };
-    this.state = {
-      positionState: "FLAT",
-      tradeCount: 0,
-      currentBarIndex: 0,
-      stopLoss: null,
-      takeProfit: null,
-      trailingStop: null,
-      entryPrice: 0,
-    };
-  }
+    constructor(executor: IExecutor, database: IDatabase, indicatorFeed: IIndicatorFeed, config: AlgoRunnerConfig) {
+        this.executor = executor;
+        this.database = database;
+        this.indicatorFeed = indicatorFeed;
+        this.config = {
+            assumePositionImmediately: false,
+            warmupBars: 0,
+            ...config,
+        };
+        this.state = {
+            positionState: "FLAT",
+            tradeCount: 0,
+            currentBarIndex: 0,
+            stopLoss: null,
+            takeProfit: null,
+            trailingStop: null,
+            entryPrice: 0,
+        };
+    }
 
-  /**
-   * Process a single bar/candle.
-   *
-   * This is the main entry point called for each bar. It:
-   * 1. Updates indicator feed with current bar
-   * 2. Checks for exit conditions (if in position)
-   * 3. Checks for entry conditions (if flat)
-   * 4. Logs all events to database
-   *
-   * @param candle - The current candle data
-   * @param barIndex - The bar index
-   */
-  async onBar(candle: Candle, barIndex: number): Promise<BarResult> {
-    this.state.currentBarIndex = barIndex;
+    /**
+     * Process a single bar/candle.
+     *
+     * This is the main entry point called for each bar. It:
+     * 1. Updates indicator feed with current bar
+     * 2. Checks for exit conditions (if in position)
+     * 3. Checks for entry conditions (if flat)
+     * 4. Logs all events to database
+     *
+     * @param candle - The current candle data
+     * @param barIndex - The bar index
+     */
+    async onBar(candle: Candle, barIndex: number): Promise<BarResult> {
+        this.state.currentBarIndex = barIndex;
 
-    // Update indicator feed with current bar
-    this.indicatorFeed.setCurrentBar(barIndex, candle.bucket);
+        this.indicatorFeed.setCurrentBar(barIndex, candle.bucket);
+        await this.logIndicatorFlips(barIndex, candle.bucket);
 
-    // Log indicator flips (if feed supports it)
-    await this.logIndicatorFlips(barIndex, candle.bucket);
+        let entryOccurred = false;
+        let exitOccurred = false;
 
-    let entryOccurred = false;
-    let exitOccurred = false;
+        const isWarmupPeriod = barIndex < (this.config.warmupBars ?? 0);
 
-    // Skip warmup period
-    const isWarmupPeriod = barIndex < (this.config.warmupBars ?? 0);
-
-    // Check for exit if in position
-    if (this.state.positionState !== "FLAT") {
-      const exitResult = await this.checkExit(candle, barIndex);
-      if (exitResult) {
-        exitOccurred = true;
-        // Reset execution price to candle.close after exit (in case of re-entry)
-        if ("setCurrentPrice" in this.executor) {
-          (this.executor as { setCurrentPrice: (p: number) => void }).setCurrentPrice(candle.close);
+        if (this.state.positionState !== "FLAT") {
+            const exitResult = await this.checkExit(candle, barIndex);
+            if (exitResult) {
+                exitOccurred = true;
+                if ("setCurrentPrice" in this.executor) {
+                    (this.executor as { setCurrentPrice: (p: number) => void }).setCurrentPrice(candle.close);
+                }
+            }
         }
-      }
+
+        if (this.state.positionState === "FLAT" && !isWarmupPeriod) {
+            const entryResult = await this.checkEntry(candle, barIndex);
+            if (entryResult) {
+                entryOccurred = true;
+            }
+        }
+
+        const equity = await this.executor.getBalance();
+
+        return {
+            barIndex,
+            timestamp: candle.bucket,
+            positionState: this.state.positionState,
+            entryOccurred,
+            exitOccurred,
+            equity,
+        };
     }
 
-    // Check for entry if flat and past warmup
-    if (this.state.positionState === "FLAT" && !isWarmupPeriod) {
-      const entryResult = await this.checkEntry(candle, barIndex);
-      if (entryResult) {
-        entryOccurred = true;
-      }
-    }
+    /**
+     * Force close any open position.
+     * Called at end of backtest or when stopping live trading.
+     */
+    async closePosition(candle: Candle, barIndex: number, reason: string): Promise<boolean> {
+        if (this.state.positionState === "FLAT") {
+            return false;
+        }
 
-    // Get current equity from executor
-    const equity = await this.executor.getBalance();
+        const position = await this.executor.getPosition(this.config.symbol);
+        if (!position) {
+            return false;
+        }
 
-    return {
-      barIndex,
-      timestamp: candle.bucket,
-      positionState: this.state.positionState,
-      entryOccurred,
-      exitOccurred,
-      equity,
-    };
-  }
+        const positionDirection = this.state.positionState as Direction;
+        const side = this.state.positionState === "LONG" ? "SELL" : "BUY";
+        await this.executor.placeOrder({
+            clientOrderId: `close-${barIndex}`,
+            symbol: this.config.symbol,
+            side,
+            type: "MARKET",
+            amountAsset: position.size,
+            isEntry: false,
+            tradeDirection: positionDirection,
+        });
 
-  /**
-   * Force close any open position.
-   * Called at end of backtest or when stopping live trading.
-   */
-  async closePosition(candle: Candle, barIndex: number, reason: string): Promise<boolean> {
-    if (this.state.positionState === "FLAT") {
-      return false;
-    }
+        await this.logStateTransition(
+            barIndex,
+            candle.bucket,
+            this.state.positionState,
+            "FLAT",
+            reason as "END_OF_BACKTEST" | "EXIT_SIGNAL"
+        );
 
-    const position = await this.executor.getPosition(this.config.symbol);
-    if (!position) {
-      return false;
-    }
+        this.state.positionState = "FLAT";
+        this.state.tradeCount++;
 
-    // Place closing order
-    const positionDirection = this.state.positionState as Direction;
-    const side = this.state.positionState === "LONG" ? "SELL" : "BUY";
-    await this.executor.placeOrder({
-      clientOrderId: `close-${barIndex}`,
-      symbol: this.config.symbol,
-      side,
-      type: "MARKET",
-      amountAsset: position.size,
-      isEntry: false,
-      tradeDirection: positionDirection,
-    });
-
-    // Log state transition
-    await this.logStateTransition(
-      barIndex,
-      candle.bucket,
-      this.state.positionState,
-      "FLAT",
-      reason as "END_OF_BACKTEST" | "EXIT_SIGNAL"
-    );
-
-    this.state.positionState = "FLAT";
-    this.state.tradeCount++;
-
-    return true;
-  }
-
-  /**
-   * Get current position state.
-   */
-  getPositionState(): PositionState {
-    return this.state.positionState;
-  }
-
-  /**
-   * Get current trade count.
-   */
-  getTradeCount(): number {
-    return this.state.tradeCount;
-  }
-
-  /**
-   * Reset the runner state.
-   */
-  reset(): void {
-    this.state = {
-      positionState: "FLAT",
-      tradeCount: 0,
-      currentBarIndex: 0,
-      stopLoss: null,
-      takeProfit: null,
-      trailingStop: null,
-      entryPrice: 0,
-    };
-  }
-
-  // ===========================================================================
-  // PRIVATE METHODS
-  // ===========================================================================
-
-  private async checkEntry(candle: Candle, barIndex: number): Promise<boolean> {
-    // Check trade limit
-    if (this.config.tradesLimit !== undefined &&
-        this.state.tradeCount >= this.config.tradesLimit) {
-      return false;
-    }
-
-    const algoType = this.config.algoParams.type;
-
-    // Check long entry
-    if (algoType !== "SHORT") {
-      const shouldEnterLong = this.checkConditionTrigger("LONG_ENTRY");
-      if (shouldEnterLong) {
-        await this.enterPosition("LONG", candle, barIndex);
         return true;
-      }
     }
 
-    // Check short entry
-    if (algoType !== "LONG") {
-      const shouldEnterShort = this.checkConditionTrigger("SHORT_ENTRY");
-      if (shouldEnterShort) {
-        await this.enterPosition("SHORT", candle, barIndex);
-        return true;
-      }
+    /**
+     * Get current position state.
+     */
+    getPositionState(): PositionState {
+        return this.state.positionState;
     }
 
-    return false;
-  }
-
-  private async checkExit(candle: Candle, barIndex: number): Promise<boolean> {
-    // Get OHLC prices for special indicator checks
-    const prices = [candle.open, candle.high, candle.low, candle.close];
-    const times = [candle.bucket, candle.bucket, candle.bucket, candle.bucket];
-
-    // Check special indicators first (SL/TP/Trailing have priority)
-    let slTriggered = false;
-    let tpTriggered = false;
-    let trailingTriggered = false;
-
-    // Check trailing stop first (highest priority as it can adjust)
-    if (this.state.trailingStop) {
-      this.state.trailingStop.calculate(prices, times);
-      trailingTriggered = this.state.trailingStop.isTriggered();
+    /**
+     * Get current trade count.
+     */
+    getTradeCount(): number {
+        return this.state.tradeCount;
     }
 
-    // Check stop loss
-    if (this.state.stopLoss && !trailingTriggered) {
-      this.state.stopLoss.calculate(prices, times);
-      slTriggered = this.state.stopLoss.isTriggered();
+    /**
+     * Reset the runner state.
+     */
+    reset(): void {
+        this.state = {
+            positionState: "FLAT",
+            tradeCount: 0,
+            currentBarIndex: 0,
+            stopLoss: null,
+            takeProfit: null,
+            trailingStop: null,
+            entryPrice: 0,
+        };
     }
 
-    // Check take profit
-    if (this.state.takeProfit && !trailingTriggered && !slTriggered) {
-      this.state.takeProfit.calculate(prices, times);
-      tpTriggered = this.state.takeProfit.isTriggered();
+    // ===========================================================================
+    // PRIVATE METHODS
+    // ===========================================================================
+
+    private async checkEntry(candle: Candle, barIndex: number): Promise<boolean> {
+        if (this.config.tradesLimit !== undefined && this.state.tradeCount >= this.config.tradesLimit) {
+            return false;
+        }
+
+        const algoType = this.config.algoParams.type;
+
+        if (algoType !== "SHORT") {
+            const shouldEnterLong = this.checkConditionTrigger("LONG_ENTRY");
+            if (shouldEnterLong) {
+                await this.enterPosition("LONG", candle, barIndex);
+                return true;
+            }
+        }
+
+        if (algoType !== "LONG") {
+            const shouldEnterShort = this.checkConditionTrigger("SHORT_ENTRY");
+            if (shouldEnterShort) {
+                await this.enterPosition("SHORT", candle, barIndex);
+                return true;
+            }
+        }
+
+        return false;
     }
 
-    // Exit on special indicator triggers (priority: trailing > SL > TP)
-    // Use the SL/TP LEVEL for execution (not the trigger price which may be worse)
-    if (trailingTriggered) {
-      // Trailing stop uses the current trailing level
-      const exitPrice = this.state.trailingStop?.getCurrentLevel();
-      await this.exitPosition(candle, barIndex, "TRAILING_STOP", exitPrice);
-      return true;
-    }
-    if (slTriggered) {
-      // Execute at the stop loss level (realistic simulation)
-      const exitPrice = this.state.stopLoss?.getStopLossPrice();
-      await this.exitPosition(candle, barIndex, "STOP_LOSS", exitPrice);
-      return true;
-    }
-    if (tpTriggered) {
-      // Execute at the take profit level
-      const exitPrice = this.state.takeProfit?.getTakeProfitPrice();
-      await this.exitPosition(candle, barIndex, "TAKE_PROFIT", exitPrice);
-      return true;
-    }
+    private async checkExit(candle: Candle, barIndex: number): Promise<boolean> {
+        const prices = [candle.open, candle.high, candle.low, candle.close];
+        const times = [candle.bucket, candle.bucket, candle.bucket, candle.bucket];
 
-    // Check indicator-based exit signal
-    const exitConditionType: ConditionType =
-      this.state.positionState === "LONG" ? "LONG_EXIT" : "SHORT_EXIT";
+        let slTriggered = false;
+        let tpTriggered = false;
+        let trailingTriggered = false;
 
-    const shouldExit = this.checkConditionTrigger(exitConditionType);
+        if (this.state.trailingStop) {
+            this.state.trailingStop.calculate(prices, times);
+            trailingTriggered = this.state.trailingStop.isTriggered();
+        }
 
-    if (shouldExit) {
-      await this.exitPosition(candle, barIndex, "EXIT_SIGNAL");
-      return true;
-    }
+        if (this.state.stopLoss && !trailingTriggered) {
+            this.state.stopLoss.calculate(prices, times);
+            slTriggered = this.state.stopLoss.isTriggered();
+        }
 
-    return false;
-  }
+        if (this.state.takeProfit && !trailingTriggered && !slTriggered) {
+            this.state.takeProfit.calculate(prices, times);
+            tpTriggered = this.state.takeProfit.isTriggered();
+        }
 
-  private checkConditionTrigger(conditionType: ConditionType): boolean {
-    const snapshot = this.indicatorFeed.getConditionSnapshot(conditionType);
-    const previousMet = this.indicatorFeed.getPreviousConditionMet(conditionType);
+        if (trailingTriggered) {
+            const exitPrice = this.state.trailingStop?.getCurrentLevel();
+            await this.exitPosition(candle, barIndex, "TRAILING_STOP", exitPrice);
+            return true;
+        }
+        if (slTriggered) {
+            const exitPrice = this.state.stopLoss?.getStopLossPrice();
+            await this.exitPosition(candle, barIndex, "STOP_LOSS", exitPrice);
+            return true;
+        }
+        if (tpTriggered) {
+            const exitPrice = this.state.takeProfit?.getTakeProfitPrice();
+            await this.exitPosition(candle, barIndex, "TAKE_PROFIT", exitPrice);
+            return true;
+        }
 
-    if (this.config.assumePositionImmediately) {
-      // Enter immediately when condition is true
-      return snapshot.conditionMet;
-    } else {
-      // Wait for edge: false → true transition
-      return !previousMet && snapshot.conditionMet;
-    }
-  }
+        const exitConditionType: ConditionType = this.state.positionState === "LONG" ? "LONG_EXIT" : "SHORT_EXIT";
 
-  private async enterPosition(
-    direction: Direction,
-    candle: Candle,
-    barIndex: number
-  ): Promise<void> {
-    // Calculate position size
-    const positionSizeUSD = this.calculatePositionSize();
+        const shouldExit = this.checkConditionTrigger(exitConditionType);
 
-    // Place order via executor
-    const side = direction === "LONG" ? "BUY" : "SELL";
-    await this.executor.placeOrder({
-      clientOrderId: `entry-${barIndex}`,
-      symbol: this.config.symbol,
-      side,
-      type: "MARKET",
-      amountUSD: positionSizeUSD,
-      isEntry: true,
-      tradeDirection: direction,
-    });
+        if (shouldExit) {
+            await this.exitPosition(candle, barIndex, "EXIT_SIGNAL");
+            return true;
+        }
 
-    // Update state
-    const newState: PositionState = direction === "LONG" ? "LONG" : "SHORT";
-    await this.logStateTransition(barIndex, candle.bucket, "FLAT", newState, "ENTRY_SIGNAL");
-    this.state.positionState = newState;
-    this.state.entryPrice = candle.close;
-
-    // Create special indicators based on exit config
-    const exitConfig = direction === "LONG"
-      ? this.config.algoParams.longExit
-      : this.config.algoParams.shortExit;
-
-    if (exitConfig?.stopLoss) {
-      this.state.stopLoss = new StopLossIndicator({
-        direction,
-        stopLoss: exitConfig.stopLoss,
-      });
-      this.state.stopLoss.reset(candle.close, candle.bucket);
+        return false;
     }
 
-    if (exitConfig?.takeProfit) {
-      this.state.takeProfit = new TakeProfitIndicator({
-        direction,
-        takeProfit: exitConfig.takeProfit,
-      });
-      this.state.takeProfit.reset(candle.close, candle.bucket);
+    private checkConditionTrigger(conditionType: ConditionType): boolean {
+        const snapshot = this.indicatorFeed.getConditionSnapshot(conditionType);
+        const previousMet = this.indicatorFeed.getPreviousConditionMet(conditionType);
+
+        if (this.config.assumePositionImmediately) {
+            return snapshot.conditionMet;
+        } else {
+            return !previousMet && snapshot.conditionMet;
+        }
     }
 
-    if (exitConfig?.trailingStop) {
-      this.state.trailingStop = new TrailingStopIndicator({
-        direction,
-        trailingStop: exitConfig.trailingStop,
-      });
-      this.state.trailingStop.reset(candle.close, candle.bucket);
+    private async enterPosition(direction: Direction, candle: Candle, barIndex: number): Promise<void> {
+        const positionSizeUSD = this.calculatePositionSize();
+
+        const side = direction === "LONG" ? "BUY" : "SELL";
+        await this.executor.placeOrder({
+            clientOrderId: `entry-${barIndex}`,
+            symbol: this.config.symbol,
+            side,
+            type: "MARKET",
+            amountUSD: positionSizeUSD,
+            isEntry: true,
+            tradeDirection: direction,
+        });
+
+        const newState: PositionState = direction === "LONG" ? "LONG" : "SHORT";
+        await this.logStateTransition(barIndex, candle.bucket, "FLAT", newState, "ENTRY_SIGNAL");
+        this.state.positionState = newState;
+        this.state.entryPrice = candle.close;
+
+        const exitConfig = direction === "LONG" ? this.config.algoParams.longExit : this.config.algoParams.shortExit;
+
+        if (exitConfig?.stopLoss) {
+            this.state.stopLoss = new StopLossIndicator({
+                direction,
+                stopLoss: exitConfig.stopLoss,
+            });
+            this.state.stopLoss.reset(candle.close, candle.bucket);
+        }
+
+        if (exitConfig?.takeProfit) {
+            this.state.takeProfit = new TakeProfitIndicator({
+                direction,
+                takeProfit: exitConfig.takeProfit,
+            });
+            this.state.takeProfit.reset(candle.close, candle.bucket);
+        }
+
+        if (exitConfig?.trailingSL && exitConfig?.stopLoss) {
+            this.state.trailingStop = new TrailingStopIndicator({
+                direction,
+                trailingOffset: exitConfig.stopLoss,
+            });
+            this.state.trailingStop.reset(candle.close, candle.bucket);
+        }
+
+        const conditionType: ConditionType = direction === "LONG" ? "LONG_ENTRY" : "SHORT_ENTRY";
+        await this.logConditionChange(barIndex, candle.bucket, conditionType, true);
     }
 
-    // Log condition change
-    const conditionType: ConditionType = direction === "LONG" ? "LONG_ENTRY" : "SHORT_ENTRY";
-    await this.logConditionChange(barIndex, candle.bucket, conditionType, true);
-  }
+    private async exitPosition(
+        candle: Candle,
+        barIndex: number,
+        reason: "EXIT_SIGNAL" | "STOP_LOSS" | "TAKE_PROFIT" | "TRAILING_STOP",
+        triggerPrice?: number
+    ): Promise<void> {
+        const position = await this.executor.getPosition(this.config.symbol);
+        if (!position) {
+            return;
+        }
 
-  private async exitPosition(
-    candle: Candle,
-    barIndex: number,
-    reason: "EXIT_SIGNAL" | "STOP_LOSS" | "TAKE_PROFIT" | "TRAILING_STOP",
-    triggerPrice?: number
-  ): Promise<void> {
-    // Get current position
-    const position = await this.executor.getPosition(this.config.symbol);
-    if (!position) {
-      return;
+        if (triggerPrice && "setCurrentPrice" in this.executor) {
+            (this.executor as { setCurrentPrice: (p: number) => void }).setCurrentPrice(triggerPrice);
+        }
+
+        const positionDirection = this.state.positionState as Direction;
+        const side = this.state.positionState === "LONG" ? "SELL" : "BUY";
+        await this.executor.placeOrder({
+            clientOrderId: `exit-${barIndex}`,
+            symbol: this.config.symbol,
+            side,
+            type: "MARKET",
+            amountAsset: position.size,
+            isEntry: false,
+            tradeDirection: positionDirection,
+        });
+
+        await this.logStateTransition(barIndex, candle.bucket, this.state.positionState, "FLAT", reason);
+
+        const conditionType: ConditionType = this.state.positionState === "LONG" ? "LONG_EXIT" : "SHORT_EXIT";
+        await this.logConditionChange(barIndex, candle.bucket, conditionType, true);
+
+        this.state.positionState = "FLAT";
+        this.state.tradeCount++;
+
+        this.state.stopLoss = null;
+        this.state.takeProfit = null;
+        this.state.trailingStop = null;
+        this.state.entryPrice = 0;
     }
 
-    // Set execution price to trigger price if available (for accurate SL/TP execution)
-    if (triggerPrice && "setCurrentPrice" in this.executor) {
-      (this.executor as { setCurrentPrice: (p: number) => void }).setCurrentPrice(triggerPrice);
+    private calculatePositionSize(): number {
+        const config = this.config.algoParams.positionSize;
+        const capital = this.config.algoParams.startingCapitalUSD;
+
+        if (config.type === "ABS") {
+            return Math.min(config.value, capital);
+        } else {
+            // REL or DYN
+            return capital * config.value;
+        }
     }
 
-    // Place closing order
-    const positionDirection = this.state.positionState as Direction;
-    const side = this.state.positionState === "LONG" ? "SELL" : "BUY";
-    await this.executor.placeOrder({
-      clientOrderId: `exit-${barIndex}`,
-      symbol: this.config.symbol,
-      side,
-      type: "MARKET",
-      amountAsset: position.size,
-      isEntry: false,
-      tradeDirection: positionDirection,
-    });
-
-    // Log state transition
-    await this.logStateTransition(
-      barIndex,
-      candle.bucket,
-      this.state.positionState,
-      "FLAT",
-      reason
-    );
-
-    // Log condition change
-    const conditionType: ConditionType =
-      this.state.positionState === "LONG" ? "LONG_EXIT" : "SHORT_EXIT";
-    await this.logConditionChange(barIndex, candle.bucket, conditionType, true);
-
-    // Update state
-    this.state.positionState = "FLAT";
-    this.state.tradeCount++;
-
-    // Clear special indicators
-    this.state.stopLoss = null;
-    this.state.takeProfit = null;
-    this.state.trailingStop = null;
-    this.state.entryPrice = 0;
-  }
-
-  private calculatePositionSize(): number {
-    const config = this.config.algoParams.positionSize;
-    const capital = this.config.algoParams.startingCapitalUSD;
-
-    if (config.type === "ABS") {
-      return Math.min(config.value, capital);
-    } else {
-      // REL or DYN
-      return capital * config.value;
-    }
-  }
-
-  private async logStateTransition(
-    barIndex: number,
-    timestamp: number,
-    fromState: PositionState,
-    toState: PositionState,
-    reason: "ENTRY_SIGNAL" | "EXIT_SIGNAL" | "STOP_LOSS" | "TAKE_PROFIT" | "TRAILING_STOP" | "END_OF_BACKTEST"
-  ): Promise<void> {
-    const event: StateTransitionEvent = {
-      type: "STATE_TRANSITION",
-      timestamp,
-      barIndex,
-      fromState,
-      toState,
-      reason,
-    };
-    await this.database.logAlgoEvent(event);
-  }
-
-  private async logConditionChange(
-    barIndex: number,
-    timestamp: number,
-    conditionType: ConditionType,
-    newState: boolean
-  ): Promise<void> {
-    const snapshot = this.indicatorFeed.getConditionSnapshot(conditionType);
-    const previousState = this.indicatorFeed.getPreviousConditionMet(conditionType);
-    const event: ConditionChangeEvent = {
-      type: "CONDITION_CHANGE",
-      timestamp,
-      barIndex,
-      conditionType,
-      previousState,
-      newState,
-      snapshot,
-    };
-    await this.database.logAlgoEvent(event);
-  }
-
-  private async logIndicatorFlips(barIndex: number, timestamp: number): Promise<void> {
-    // Check if feed supports getLastFlips (backtest feed does, live feed might not)
-    const hasGetLastFlips = typeof (this.indicatorFeed as { getLastFlips?: () => IndicatorFlip[] }).getLastFlips === "function";
-    if (hasGetLastFlips) {
-      const flips = (this.indicatorFeed as { getLastFlips: () => IndicatorFlip[] }).getLastFlips();
-      for (const flip of flips) {
-        const info = this.indicatorFeed.getIndicatorInfo().get(flip.indicatorKey);
-        if (info) {
-          const snapshot = this.indicatorFeed.getConditionSnapshot(info.conditionType);
-          const event: IndicatorFlipEvent = {
-            type: "INDICATOR_FLIP",
+    private async logStateTransition(
+        barIndex: number,
+        timestamp: number,
+        fromState: PositionState,
+        toState: PositionState,
+        reason: "ENTRY_SIGNAL" | "EXIT_SIGNAL" | "STOP_LOSS" | "TAKE_PROFIT" | "TRAILING_STOP" | "END_OF_BACKTEST"
+    ): Promise<void> {
+        const event: StateTransitionEvent = {
+            type: "STATE_TRANSITION",
             timestamp,
             barIndex,
-            indicatorKey: flip.indicatorKey,
-            indicatorType: info.type,
-            conditionType: info.conditionType,
-            isRequired: info.isRequired,
-            previousValue: flip.previousValue,
-            newValue: flip.newValue,
-            conditionSnapshot: snapshot,
-          };
-          await this.database.logAlgoEvent(event);
-        }
-      }
+            fromState,
+            toState,
+            reason,
+        };
+        await this.database.logAlgoEvent(event);
     }
-  }
+
+    private async logConditionChange(
+        barIndex: number,
+        timestamp: number,
+        conditionType: ConditionType,
+        newState: boolean
+    ): Promise<void> {
+        const snapshot = this.indicatorFeed.getConditionSnapshot(conditionType);
+        const previousState = this.indicatorFeed.getPreviousConditionMet(conditionType);
+        const event: ConditionChangeEvent = {
+            type: "CONDITION_CHANGE",
+            timestamp,
+            barIndex,
+            conditionType,
+            previousState,
+            newState,
+            snapshot,
+        };
+        await this.database.logAlgoEvent(event);
+    }
+
+    private async logIndicatorFlips(barIndex: number, timestamp: number): Promise<void> {
+        const feedWithFlips = this.indicatorFeed as unknown as { getLastFlips?: () => IndicatorFlip[] };
+        const hasGetLastFlips = typeof feedWithFlips.getLastFlips === "function";
+        if (hasGetLastFlips && feedWithFlips.getLastFlips) {
+            const flips = feedWithFlips.getLastFlips();
+            for (const flip of flips) {
+                const info = this.indicatorFeed.getIndicatorInfo().get(flip.indicatorKey);
+                if (info) {
+                    const snapshot = this.indicatorFeed.getConditionSnapshot(info.conditionType);
+                    const event: IndicatorFlipEvent = {
+                        type: "INDICATOR_FLIP",
+                        timestamp,
+                        barIndex,
+                        indicatorKey: flip.indicatorKey,
+                        indicatorType: info.type,
+                        conditionType: info.conditionType,
+                        isRequired: info.isRequired,
+                        previousValue: flip.previousValue,
+                        newValue: flip.newValue,
+                        conditionSnapshot: snapshot,
+                    };
+                    await this.database.logAlgoEvent(event);
+                }
+            }
+        }
+    }
 }
 
 // =============================================================================
@@ -611,14 +539,14 @@ export class AlgoRunner {
  * Result of running a backtest with AlgoRunner.
  */
 export interface AlgoRunnerBacktestResult {
-  /** All bar results */
-  barResults: BarResult[];
-  /** Final trade count */
-  totalTrades: number;
-  /** Final equity */
-  finalEquity: number;
-  /** Final position state */
-  finalPositionState: PositionState;
+    /** All bar results */
+    barResults: BarResult[];
+    /** Final trade count */
+    totalTrades: number;
+    /** Final equity */
+    finalEquity: number;
+    /** Final position state */
+    finalPositionState: PositionState;
 }
 
 /**
@@ -638,45 +566,41 @@ export interface AlgoRunnerBacktestResult {
  * @param closePositionOnExit - Whether to close position at end of backtest
  */
 export async function runBacktestWithAlgoRunner(
-  executor: IExecutor,
-  database: IDatabase,
-  indicatorFeed: IIndicatorFeed,
-  candles: Candle[],
-  config: AlgoRunnerConfig,
-  closePositionOnExit: boolean = true
+    executor: IExecutor,
+    database: IDatabase,
+    indicatorFeed: IIndicatorFeed,
+    candles: Candle[],
+    config: AlgoRunnerConfig,
+    closePositionOnExit: boolean = true
 ): Promise<AlgoRunnerBacktestResult> {
-  const algo = new AlgoRunner(executor, database, indicatorFeed, config);
-  const barResults: BarResult[] = [];
+    const algo = new AlgoRunner(executor, database, indicatorFeed, config);
+    const barResults: BarResult[] = [];
 
-  // Process each candle
-  for (let i = 0; i < candles.length; i++) {
-    const candle = candles[i]!;
-    const isLastCandle = i === candles.length - 1;
+    for (let i = 0; i < candles.length; i++) {
+        const candle = candles[i]!;
+        const isLastCandle = i === candles.length - 1;
 
-    // Update executor context (for FakeExecutor)
-    if ("setCurrentBar" in executor) {
-      (executor as { setCurrentBar: (b: number, t: number) => void }).setCurrentBar(i, candle.bucket);
+        if ("setCurrentBar" in executor) {
+            (executor as { setCurrentBar: (b: number, t: number) => void }).setCurrentBar(i, candle.bucket);
+        }
+        if ("setCurrentPrice" in executor) {
+            (executor as { setCurrentPrice: (p: number) => void }).setCurrentPrice(candle.close);
+        }
+
+        const result = await algo.onBar(candle, i);
+        barResults.push(result);
+
+        if (isLastCandle && closePositionOnExit && algo.getPositionState() !== "FLAT") {
+            await algo.closePosition(candle, i, "END_OF_BACKTEST");
+        }
     }
-    if ("setCurrentPrice" in executor) {
-      (executor as { setCurrentPrice: (p: number) => void }).setCurrentPrice(candle.close);
-    }
 
-    // Process bar
-    const result = await algo.onBar(candle, i);
-    barResults.push(result);
+    const finalEquity = await executor.getBalance();
 
-    // Handle end of backtest
-    if (isLastCandle && closePositionOnExit && algo.getPositionState() !== "FLAT") {
-      await algo.closePosition(candle, i, "END_OF_BACKTEST");
-    }
-  }
-
-  const finalEquity = await executor.getBalance();
-
-  return {
-    barResults,
-    totalTrades: algo.getTradeCount(),
-    finalEquity,
-    finalPositionState: algo.getPositionState(),
-  };
+    return {
+        barResults,
+        totalTrades: algo.getTradeCount(),
+        finalEquity,
+        finalPositionState: algo.getPositionState(),
+    };
 }

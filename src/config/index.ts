@@ -24,28 +24,28 @@
 // =============================================================================
 
 export type {
-  // Core types (re-exported from core/types)
-  AlgoParams,
-  AlgoConfig,
-  RunSettings,
-  RunStatus,
-  // Enhanced types
-  VersionedAlgoConfig,
-  CreateAlgoConfigInput,
-  UpdateAlgoConfigInput,
-  TrackedRunSettings,
-  CreateRunSettingsInput,
-  VersionSummary,
-  AlgoVersionHistory,
-  // Comparison types
-  ChangeType,
-  ConfigDiff,
-  VersionComparison,
-  RunMetricsComparison,
-  // Storage types
-  ConfigStore,
-  ListConfigsOptions,
-  ListRunsOptions,
+    // Core types (re-exported from core/types)
+    AlgoParams,
+    AlgoConfig,
+    RunSettings,
+    RunStatus,
+    // Enhanced types
+    VersionedAlgoConfig,
+    CreateAlgoConfigInput,
+    UpdateAlgoConfigInput,
+    TrackedRunSettings,
+    CreateRunSettingsInput,
+    VersionSummary,
+    AlgoVersionHistory,
+    // Comparison types
+    ChangeType,
+    ConfigDiff,
+    VersionComparison,
+    RunMetricsComparison,
+    // Storage types
+    ConfigStore,
+    ListConfigsOptions,
+    ListRunsOptions,
 } from "./types.ts";
 
 // =============================================================================
@@ -53,49 +53,37 @@ export type {
 // =============================================================================
 
 export {
-  VersionManager,
-  defaultVersionManager,
-  hashAlgoParams,
-  generateAlgoID,
-  generateRunID,
+    VersionManager,
+    defaultVersionManager,
+    hashAlgoParams,
+    generateAlgoID,
+    generateRunID,
 } from "./version-manager.ts";
 
 // =============================================================================
 // VALIDATION
 // =============================================================================
 
-export {
-  validateAlgoParams,
-  validateAlgoConfig,
-  validateRunSettings,
-  validateBacktestSetup,
-} from "./validation.ts";
+export { validateAlgoParams, validateAlgoConfig, validateRunSettings, validateBacktestSetup } from "./validation.ts";
 
-export type {
-  ValidationSeverity,
-  ValidationIssue,
-  ValidationResult,
-} from "./validation.ts";
+export type { ValidationSeverity, ValidationIssue, ValidationResult } from "./validation.ts";
 
 // =============================================================================
 // COMPARISON
 // =============================================================================
 
 export {
-  compareAlgoParams,
-  compareConfigs,
-  getChangeSummary,
-  getKeyChanges,
-  compareIndicators,
-  isSuperset,
-  isBackwardsCompatible,
+    compareAlgoParams,
+    compareConfigs,
+    getChangeSummary,
+    getKeyChanges,
+    compareIndicators,
+    isSuperset,
+    isBackwardsCompatible,
 } from "./comparison.ts";
 
 // =============================================================================
 // RUN MANAGER
 // =============================================================================
 
-export {
-  RunManager,
-  defaultRunManager,
-} from "./run-manager.ts";
+export { RunManager, defaultRunManager } from "./run-manager.ts";

@@ -1,10 +1,10 @@
-import { type IndicatorConfig } from '../'
-import { type DexType } from './dex'
+import { type IndicatorConfig } from "../";
+import { type DexType } from "./dex";
 
 export interface LadderParams {
-    levels: Record<number, number>, // <offset, weight> in percent
-    direction: 'UP' | 'DOWN' | 'CENTER'; // Expected offset sign(s)
-    method: 'CLAMP' | 'SCALE'; // Whether to remove any level beyond limit or scale them proportionally to fit all
+    levels: Record<number, number>; // <offset, weight> in percent
+    direction: "UP" | "DOWN" | "CENTER"; // Expected offset sign(s)
+    method: "CLAMP" | "SCALE"; // Whether to remove any level beyond limit or scale them proportionally to fit all
     normalize: boolean; // Whether to require all weights to be normalized (false for pyramiding)
     // Provided via PersistentLadder constructor
     // reference: number; // Reference (0 offset) level
@@ -16,9 +16,8 @@ export class PersistentLadder {
     public readonly reference: number;
     public readonly limit: number | undefined;
     public activeLevels: Record<number, number>;
-    
-    constructor(reference: number, params: LadderParams, limit?: number)
-    {
+
+    constructor(reference: number, params: LadderParams, limit?: number) {
         this.reference = reference;
         this.params = params;
         this.limit = limit;
@@ -27,9 +26,9 @@ export class PersistentLadder {
     }
 }
 
-export type ValueType = 'ABS' | 'REL' | 'DYN'; // DYN is modulated by select indicator's value (0-100 range)
-export type AlgoType = 'LONG' | 'SHORT' | 'BOTH';
-export type RunStatus = 'NEW' | 'RUNNING' | 'DONE';
+export type ValueType = "ABS" | "REL" | "DYN"; // DYN is modulated by select indicator's value (0-100 range)
+export type AlgoType = "LONG" | "SHORT" | "BOTH";
+export type RunStatus = "NEW" | "RUNNING" | "DONE";
 
 export interface ValueConfig {
     type: ValueType; // Applicable to both price levels and position sizes
@@ -63,10 +62,10 @@ export interface AlgoParams {
     // Position sizing section below (depends on backtested win rate for risk management)
     positionSize: ValueConfig; // Relative to the currentCapitalUSD if type=REL/DYN (start with startingCapitalUSD)
     // pyramidingLadder?: LadderParams; // Turned into PersistentLadder upon CASH -> LONG/SHORT transition for top-ups
-    orderType: 'MARKET' | 'TWAP' | 'SMART' | 'LIMIT'; // Speed vs fill rate/probability trade-off
+    orderType: "MARKET" | "TWAP" | "SMART" | "LIMIT"; // Speed vs fill rate/probability trade-off
     // currentCapitalUSD: number; // Part of running algo's status (different table/interface)
     startingCapitalUSD: number; // Single-use initial capital when positionSize.type=REL/DYN (compounding) or
-}                               // minimal capital required to sustain any loosing streaks when positionSize.type=ABS
+} // minimal capital required to sustain any loosing streaks when positionSize.type=ABS
 
 export interface AlgoConfig {
     userID: string;
@@ -89,7 +88,7 @@ export interface RunSettings {
     tradesLimit?: number; // Auto-stop the algo (or backtest) after reaching certain number of trades (like expiry time)
     assumePositionImmediately: boolean; // Single-use option/condition related to RunStatus NEW -> RUNNING transition
     closePositionOnExit: boolean; // Single-use option/condition related to RunStatus RUNNING -> DONE transition
-    launchTime: number;// Unix timestamp (in seconds) of when the Run was submitted for processing
+    launchTime: number; // Unix timestamp (in seconds) of when the Run was submitted for processing
     status: RunStatus; // Algo and Backtesting services (see isBacktest) are responsible for progressing the run status
     dex: DexType;
     // Part of running algo's status (different table/interface):

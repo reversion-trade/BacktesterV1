@@ -48,7 +48,7 @@ export const DEFAULT_SLIPPAGE_BPS = 10;
  * Example: bpsToDecimal(10) = 0.001 (0.1%)
  */
 export function bpsToDecimal(bps: number): number {
-  return bps / BPS_DIVISOR;
+    return bps / BPS_DIVISOR;
 }
 
 /**
@@ -56,5 +56,5 @@ export function bpsToDecimal(bps: number): number {
  * Example: decimalToBps(0.001) = 10
  */
 export function decimalToBps(decimal: number): number {
-  return decimal * BPS_DIVISOR;
+    return decimal * BPS_DIVISOR;
 }

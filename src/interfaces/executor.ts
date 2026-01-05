@@ -29,100 +29,100 @@ import type { Direction } from "../core/types.ts";
  * Request to place an order.
  */
 export interface OrderRequest {
-  /** Unique client-generated order ID */
-  clientOrderId: string;
-  /** Asset symbol (e.g., "BTC", "ETH") */
-  symbol: string;
-  /** Order side */
-  side: "BUY" | "SELL";
-  /** Order type */
-  type: "MARKET" | "LIMIT" | "TWAP" | "SMART";
-  /** Order amount in USD (for market orders) */
-  amountUSD?: number;
-  /** Order amount in asset units */
-  amountAsset?: number;
-  /** Limit price (required for LIMIT orders) */
-  limitPrice?: number;
-  /** Time-in-force (optional) */
-  timeInForce?: "GTC" | "IOC" | "FOK";
-  /** Whether this order is opening (entry) or closing (exit) a position */
-  isEntry?: boolean;
-  /** Direction of the position being opened or closed */
-  tradeDirection?: Direction;
+    /** Unique client-generated order ID */
+    clientOrderId: string;
+    /** Asset symbol (e.g., "BTC", "ETH") */
+    symbol: string;
+    /** Order side */
+    side: "BUY" | "SELL";
+    /** Order type */
+    type: "MARKET" | "LIMIT" | "TWAP" | "SMART";
+    /** Order amount in USD (for market orders) */
+    amountUSD?: number;
+    /** Order amount in asset units */
+    amountAsset?: number;
+    /** Limit price (required for LIMIT orders) */
+    limitPrice?: number;
+    /** Time-in-force (optional) */
+    timeInForce?: "GTC" | "IOC" | "FOK";
+    /** Whether this order is opening (entry) or closing (exit) a position */
+    isEntry?: boolean;
+    /** Direction of the position being opened or closed */
+    tradeDirection?: Direction;
 }
 
 /**
  * Result of an order execution.
  */
 export interface OrderResult {
-  /** Exchange order ID */
-  orderId: string;
-  /** Client order ID (from request) */
-  clientOrderId: string;
-  /** Order status */
-  status: "FILLED" | "PARTIALLY_FILLED" | "REJECTED" | "PENDING";
-  /** Filled amount in asset units */
-  filledAmount: number;
-  /** Average fill price */
-  avgPrice: number;
-  /** Total value in USD */
-  totalValueUSD: number;
-  /** Fee paid in USD */
-  feeUSD: number;
-  /** Slippage incurred in USD */
-  slippageUSD: number;
-  /** Execution timestamp */
-  timestamp: number;
-  /** Rejection reason (if rejected) */
-  rejectReason?: string;
+    /** Exchange order ID */
+    orderId: string;
+    /** Client order ID (from request) */
+    clientOrderId: string;
+    /** Order status */
+    status: "FILLED" | "PARTIALLY_FILLED" | "REJECTED" | "PENDING";
+    /** Filled amount in asset units */
+    filledAmount: number;
+    /** Average fill price */
+    avgPrice: number;
+    /** Total value in USD */
+    totalValueUSD: number;
+    /** Fee paid in USD */
+    feeUSD: number;
+    /** Slippage incurred in USD */
+    slippageUSD: number;
+    /** Execution timestamp */
+    timestamp: number;
+    /** Rejection reason (if rejected) */
+    rejectReason?: string;
 }
 
 /**
  * An open order.
  */
 export interface OpenOrder {
-  /** Exchange order ID */
-  orderId: string;
-  /** Client order ID */
-  clientOrderId: string;
-  /** Asset symbol */
-  symbol: string;
-  /** Order side */
-  side: "BUY" | "SELL";
-  /** Order type */
-  type: "MARKET" | "LIMIT" | "TWAP" | "SMART";
-  /** Order status */
-  status: "PENDING" | "PARTIALLY_FILLED";
-  /** Original order amount in asset units */
-  originalAmount: number;
-  /** Remaining amount to fill */
-  remainingAmount: number;
-  /** Limit price (for limit orders) */
-  limitPrice?: number;
-  /** Creation timestamp */
-  createdAt: number;
+    /** Exchange order ID */
+    orderId: string;
+    /** Client order ID */
+    clientOrderId: string;
+    /** Asset symbol */
+    symbol: string;
+    /** Order side */
+    side: "BUY" | "SELL";
+    /** Order type */
+    type: "MARKET" | "LIMIT" | "TWAP" | "SMART";
+    /** Order status */
+    status: "PENDING" | "PARTIALLY_FILLED";
+    /** Original order amount in asset units */
+    originalAmount: number;
+    /** Remaining amount to fill */
+    remainingAmount: number;
+    /** Limit price (for limit orders) */
+    limitPrice?: number;
+    /** Creation timestamp */
+    createdAt: number;
 }
 
 /**
  * Current position information.
  */
 export interface Position {
-  /** Asset symbol */
-  symbol: string;
-  /** Position direction */
-  direction: Direction;
-  /** Entry price (average) */
-  entryPrice: number;
-  /** Position size in asset units */
-  size: number;
-  /** Position size in USD (at entry) */
-  sizeUSD: number;
-  /** Unrealized P&L in USD */
-  unrealizedPnlUSD: number;
-  /** Entry timestamp */
-  entryTime: number;
-  /** Associated trade ID (for backtest tracking) */
-  tradeId?: number;
+    /** Asset symbol */
+    symbol: string;
+    /** Position direction */
+    direction: Direction;
+    /** Entry price (average) */
+    entryPrice: number;
+    /** Position size in asset units */
+    size: number;
+    /** Position size in USD (at entry) */
+    sizeUSD: number;
+    /** Unrealized P&L in USD */
+    unrealizedPnlUSD: number;
+    /** Entry timestamp */
+    entryTime: number;
+    /** Associated trade ID (for backtest tracking) */
+    tradeId?: number;
 }
 
 // =============================================================================
@@ -154,50 +154,50 @@ export interface Position {
  * ```
  */
 export interface IExecutor {
-  /**
-   * Place an order.
-   *
-   * @param order - Order request
-   * @returns Order execution result
-   */
-  placeOrder(order: OrderRequest): Promise<OrderResult>;
+    /**
+     * Place an order.
+     *
+     * @param order - Order request
+     * @returns Order execution result
+     */
+    placeOrder(order: OrderRequest): Promise<OrderResult>;
 
-  /**
-   * Cancel an open order.
-   *
-   * @param orderId - Exchange order ID to cancel
-   * @returns True if cancelled, false if already filled/cancelled
-   */
-  cancelOrder(orderId: string): Promise<boolean>;
+    /**
+     * Cancel an open order.
+     *
+     * @param orderId - Exchange order ID to cancel
+     * @returns True if cancelled, false if already filled/cancelled
+     */
+    cancelOrder(orderId: string): Promise<boolean>;
 
-  /**
-   * Get all open orders.
-   *
-   * @param symbol - Optional filter by symbol
-   * @returns Array of open orders
-   */
-  getOpenOrders(symbol?: string): Promise<OpenOrder[]>;
+    /**
+     * Get all open orders.
+     *
+     * @param symbol - Optional filter by symbol
+     * @returns Array of open orders
+     */
+    getOpenOrders(symbol?: string): Promise<OpenOrder[]>;
 
-  /**
-   * Get current position.
-   *
-   * @param symbol - Asset symbol
-   * @returns Position or null if flat
-   */
-  getPosition(symbol: string): Promise<Position | null>;
+    /**
+     * Get current position.
+     *
+     * @param symbol - Asset symbol
+     * @returns Position or null if flat
+     */
+    getPosition(symbol: string): Promise<Position | null>;
 
-  /**
-   * Get current price for a symbol.
-   *
-   * @param symbol - Asset symbol
-   * @returns Current price
-   */
-  getCurrentPrice(symbol: string): Promise<number>;
+    /**
+     * Get current price for a symbol.
+     *
+     * @param symbol - Asset symbol
+     * @returns Current price
+     */
+    getCurrentPrice(symbol: string): Promise<number>;
 
-  /**
-   * Get account balance.
-   *
-   * @returns Available USD balance
-   */
-  getBalance(): Promise<number>;
+    /**
+     * Get account balance.
+     *
+     * @returns Available USD balance
+     */
+    getBalance(): Promise<number>;
 }
