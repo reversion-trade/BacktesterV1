@@ -74,6 +74,15 @@ export type RawValueCache = Map<string, number[]>;
  * const entryEval = feed.evaluateCondition("LONG_ENTRY");
  * ```
  */
+/**
+ * Represents an indicator signal flip (change from true to false or vice versa).
+ */
+export interface IndicatorFlip {
+  indicatorKey: string;
+  previousValue: boolean;
+  newValue: boolean;
+}
+
 export class PreCalculatedFeed implements IIndicatorFeed {
   private signalCache: SignalCache;
   private rawValueCache: RawValueCache | null;
@@ -82,6 +91,8 @@ export class PreCalculatedFeed implements IIndicatorFeed {
   private currentTimestamp: number = 0;
   private totalBars: number = 0;
   private previousConditionMet: Map<ConditionType, boolean> = new Map();
+  private previousSignals: Map<string, boolean> = new Map();
+  private lastFlips: IndicatorFlip[] = [];
 
   constructor(
     signalCache: SignalCache,
@@ -110,16 +121,53 @@ export class PreCalculatedFeed implements IIndicatorFeed {
   // ===========================================================================
 
   setCurrentBar(barIndex: number, timestamp: number): void {
+    // Clear previous flips
+    this.lastFlips = [];
+
     // Before changing bar, save current condition states as "previous"
     if (barIndex !== this.currentBarIndex) {
       for (const conditionType of ["LONG_ENTRY", "LONG_EXIT", "SHORT_ENTRY", "SHORT_EXIT"] as ConditionType[]) {
         const snapshot = this.getConditionSnapshot(conditionType);
         this.previousConditionMet.set(conditionType, snapshot.conditionMet);
       }
+
+      // Save current signals as previous before moving to new bar
+      for (const [key, signalArray] of this.signalCache) {
+        if (this.currentBarIndex < signalArray.length) {
+          const currentSignal = signalArray[this.currentBarIndex];
+          if (currentSignal !== undefined) {
+            this.previousSignals.set(key, currentSignal);
+          }
+        }
+      }
     }
 
     this.currentBarIndex = barIndex;
     this.currentTimestamp = timestamp;
+
+    // Detect flips by comparing previous signals to current signals
+    for (const [key, signalArray] of this.signalCache) {
+      if (barIndex < signalArray.length) {
+        const newSignal = signalArray[barIndex];
+        const previousSignal = this.previousSignals.get(key);
+
+        // If we have a previous value and it changed, record the flip
+        if (previousSignal !== undefined && newSignal !== undefined && previousSignal !== newSignal) {
+          this.lastFlips.push({
+            indicatorKey: key,
+            previousValue: previousSignal,
+            newValue: newSignal,
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Get indicator flips that occurred when transitioning to the current bar.
+   */
+  getLastFlips(): IndicatorFlip[] {
+    return [...this.lastFlips];
   }
 
   getCurrentBarIndex(): number {
@@ -308,5 +356,7 @@ export class PreCalculatedFeed implements IIndicatorFeed {
     this.previousConditionMet.set("LONG_EXIT", false);
     this.previousConditionMet.set("SHORT_ENTRY", false);
     this.previousConditionMet.set("SHORT_EXIT", false);
+    this.previousSignals.clear();
+    this.lastFlips = [];
   }
 }

@@ -253,9 +253,10 @@ export async function runBacktestPipeline(
   }
 
   // Convert IndicatorInfo from collector format to interface format
+  // IMPORTANT: Use info.indicatorKey as map key (matches signalCache keys), not the composite key
   const indicatorInfoForFeed = new Map<string, import("../../interfaces/indicator-feed.ts").IndicatorInfo>();
-  for (const [key, info] of initResult.indicatorInfoMap) {
-    indicatorInfoForFeed.set(key, {
+  for (const [_key, info] of initResult.indicatorInfoMap) {
+    indicatorInfoForFeed.set(info.indicatorKey, {
       key: info.indicatorKey,
       type: info.indicatorType,
       conditionType: info.conditionType,

@@ -35,12 +35,14 @@ import type {
   ConditionType,
   StateTransitionEvent,
   ConditionChangeEvent,
+  IndicatorFlipEvent,
 } from "../events/types.ts";
 import {
   StopLossIndicator,
   TakeProfitIndicator,
   TrailingStopIndicator,
 } from "./special-indicators/index.ts";
+import type { IndicatorFlip } from "./fakes/pre-calculated-feed.ts";
 
 // =============================================================================
 // TYPES
@@ -184,6 +186,9 @@ export class AlgoRunner {
 
     // Update indicator feed with current bar
     this.indicatorFeed.setCurrentBar(barIndex, candle.bucket);
+
+    // Log indicator flips (if feed supports it)
+    await this.logIndicatorFlips(barIndex, candle.bucket);
 
     let entryOccurred = false;
     let exitOccurred = false;
@@ -568,6 +573,33 @@ export class AlgoRunner {
       snapshot,
     };
     await this.database.logAlgoEvent(event);
+  }
+
+  private async logIndicatorFlips(barIndex: number, timestamp: number): Promise<void> {
+    // Check if feed supports getLastFlips (backtest feed does, live feed might not)
+    const hasGetLastFlips = typeof (this.indicatorFeed as { getLastFlips?: () => IndicatorFlip[] }).getLastFlips === "function";
+    if (hasGetLastFlips) {
+      const flips = (this.indicatorFeed as { getLastFlips: () => IndicatorFlip[] }).getLastFlips();
+      for (const flip of flips) {
+        const info = this.indicatorFeed.getIndicatorInfo().get(flip.indicatorKey);
+        if (info) {
+          const snapshot = this.indicatorFeed.getConditionSnapshot(info.conditionType);
+          const event: IndicatorFlipEvent = {
+            type: "INDICATOR_FLIP",
+            timestamp,
+            barIndex,
+            indicatorKey: flip.indicatorKey,
+            indicatorType: info.type,
+            conditionType: info.conditionType,
+            isRequired: info.isRequired,
+            previousValue: flip.previousValue,
+            newValue: flip.newValue,
+            conditionSnapshot: snapshot,
+          };
+          await this.database.logAlgoEvent(event);
+        }
+      }
+    }
   }
 }
 

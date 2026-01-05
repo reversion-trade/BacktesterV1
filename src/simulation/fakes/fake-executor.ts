@@ -331,6 +331,21 @@ export class FakeExecutor implements IExecutor {
   }
 
   async getBalance(): Promise<number> {
+    // Return total equity: cash + position value (mark-to-market)
+    if (this.position && this.currentPrice > 0) {
+      // Calculate current position value at market price
+      const positionValueAtMarket = this.position.size * this.currentPrice;
+
+      // For LONG: we spent USD to buy asset, position value is what we'd get if we sold
+      // For SHORT: we received USD when we sold, position value is negative (liability)
+      if (this.position.direction === "LONG") {
+        return this.capitalUSD + positionValueAtMarket;
+      } else {
+        // SHORT: capitalUSD includes proceeds from short sale
+        // We owe back the asset, so subtract current value to buy it back
+        return this.capitalUSD - positionValueAtMarket;
+      }
+    }
     return this.capitalUSD;
   }
 
