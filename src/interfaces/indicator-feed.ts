@@ -1,185 +1,44 @@
-/**
- * Indicator Feed Interface
- *
- * @module interfaces/indicator-feed
- * @description
- * Defines the interface for accessing indicator signals.
- * Implementations:
- * - PreCalculatedFeed: Pre-computed signals for backtesting
- * - RealTimeFeed: Live indicator computation for live trading
- *
- * @architecture
- * This interface enables the algo class to access indicator signals
- * without knowing whether they come from pre-calculated cache or
- * real-time computation. The algo class should have NO conditional
- * logic like 'if is_backtesting: do X else do Y'.
- *
- * @audit-trail
- * - Created: 2026-01-01 (Sprint 3: Dependency Injection)
- * - Purpose: Abstract indicator access for live/backtest parity
- */
+// Indicator Feed Interface - Defines the contract for accessing indicator signals
+// Implementations: PreCalculatedFeed (pre-computed for backtest), RealTimeFeed (live computation)
 
 import type { ConditionType, ConditionSnapshot } from "../events/types.ts";
 
-// =============================================================================
 // INDICATOR INFO TYPES
-// =============================================================================
 
-/**
- * Metadata about an indicator.
- */
 export interface IndicatorInfo {
-    /** Unique key identifying this indicator (includes params hash) */
-    key: string;
-    /** Indicator type name (e.g., "RSI", "MACD") */
-    type: string;
-    /** Which condition this indicator belongs to */
-    conditionType: ConditionType;
-    /** Whether this is a required or optional indicator */
-    isRequired: boolean;
-    /** Human-readable description */
-    description?: string;
+    key: string;                  // Unique key identifying this indicator (includes params hash)
+    type: string;                 // Indicator type name (e.g., "RSI", "MACD")
+    conditionType: ConditionType; // Which condition this indicator belongs to
+    isRequired: boolean;          // Whether this is a required or optional indicator
+    description?: string;         // Human-readable description
 }
 
-/**
- * Current state of a single indicator.
- */
 export interface IndicatorState {
-    /** Unique indicator key */
-    key: string;
-    /** Current boolean signal */
-    signal: boolean;
-    /** Raw numeric value (if applicable) */
-    rawValue?: number;
-    /** Timestamp of last update */
-    lastUpdated: number;
+    key: string;        // Unique indicator key
+    signal: boolean;    // Current boolean signal
+    rawValue?: number;  // Raw numeric value (if applicable)
+    lastUpdated: number; // Timestamp of last update
 }
 
-/**
- * Result of evaluating all indicators for a condition.
- */
 export interface ConditionEvaluation {
-    /** Which condition was evaluated */
-    conditionType: ConditionType;
-    /** Whether the condition is met */
-    isMet: boolean;
-    /** Detailed snapshot */
-    snapshot: ConditionSnapshot;
-    /** States of contributing indicators */
-    indicatorStates: IndicatorState[];
+    conditionType: ConditionType;      // Which condition was evaluated
+    isMet: boolean;                    // Whether the condition is met
+    snapshot: ConditionSnapshot;       // Detailed snapshot
+    indicatorStates: IndicatorState[]; // States of contributing indicators
 }
 
-// =============================================================================
 // INDICATOR FEED INTERFACE
-// =============================================================================
 
-/**
- * Interface for accessing indicator signals.
- *
- * Abstracts the indicator computation layer so the algo class can work
- * identically in backtest (pre-calculated) and live (real-time) environments.
- *
- * @example
- * ```typescript
- * // Algo class uses feed without knowing environment
- * async onBar(barIndex: number) {
- *   // Get all current signals
- *   const signals = this.feed.getCurrentSignals();
- *
- *   // Check if entry condition is met
- *   const entryEval = this.feed.evaluateCondition("LONG_ENTRY");
- *   if (entryEval.isMet) {
- *     // Execute entry logic
- *   }
- * }
- * ```
- */
 export interface IIndicatorFeed {
-    /**
-     * Set the current bar index.
-     * For backtesting, this advances through pre-calculated signals.
-     * For live trading, this may trigger recalculation.
-     *
-     * @param barIndex - The bar index to set
-     * @param timestamp - The timestamp of the bar
-     */
-    setCurrentBar(barIndex: number, timestamp: number): void;
-
-    /**
-     * Get the current bar index.
-     *
-     * @returns The current bar index
-     */
-    getCurrentBarIndex(): number;
-
-    /**
-     * Get all indicator signals for the current bar.
-     *
-     * @returns Map of indicator key to boolean signal
-     */
-    getCurrentSignals(): Map<string, boolean>;
-
-    /**
-     * Get a specific indicator's signal for the current bar.
-     *
-     * @param indicatorKey - The indicator key
-     * @returns The boolean signal or undefined if not found
-     */
-    getSignal(indicatorKey: string): boolean | undefined;
-
-    /**
-     * Get the raw numeric value for an indicator (if applicable).
-     *
-     * @param indicatorKey - The indicator key
-     * @returns The raw value or undefined if not applicable
-     */
-    getRawValue(indicatorKey: string): number | undefined;
-
-    /**
-     * Evaluate a condition (entry or exit) for the current bar.
-     *
-     * @param conditionType - Which condition to evaluate
-     * @returns The evaluation result with snapshot
-     */
-    evaluateCondition(conditionType: ConditionType): ConditionEvaluation;
-
-    /**
-     * Get a snapshot of a condition's state.
-     *
-     * @param conditionType - Which condition to snapshot
-     * @returns The condition snapshot
-     */
-    getConditionSnapshot(conditionType: ConditionType): ConditionSnapshot;
-
-    /**
-     * Get metadata for all registered indicators.
-     *
-     * @returns Map of indicator key to info
-     */
-    getIndicatorInfo(): Map<string, IndicatorInfo>;
-
-    /**
-     * Get indicators that belong to a specific condition.
-     *
-     * @param conditionType - Which condition to query
-     * @returns Array of indicator info for that condition
-     */
-    getIndicatorsForCondition(conditionType: ConditionType): IndicatorInfo[];
-
-    /**
-     * Check if a previous condition was met (for detecting transitions).
-     *
-     * @param conditionType - Which condition to check
-     * @returns Whether the condition was met on the previous bar
-     */
-    getPreviousConditionMet(conditionType: ConditionType): boolean;
-
-    /**
-     * Get the total number of bars in the feed.
-     * For backtesting, this is the pre-calculated signal length.
-     * For live trading, this grows as new bars arrive.
-     *
-     * @returns Total number of bars
-     */
-    getTotalBars(): number;
+    setCurrentBar(barIndex: number, timestamp: number): void;            // Set current bar index (advances through signals)
+    getCurrentBarIndex(): number;                                        // Get current bar index
+    getCurrentSignals(): Map<string, boolean>;                           // Get all indicator signals for current bar
+    getSignal(indicatorKey: string): boolean | undefined;                // Get specific indicator's signal
+    getRawValue(indicatorKey: string): number | undefined;               // Get raw numeric value (if applicable)
+    evaluateCondition(conditionType: ConditionType): ConditionEvaluation; // Evaluate a condition (entry/exit)
+    getConditionSnapshot(conditionType: ConditionType): ConditionSnapshot; // Get snapshot of condition's state
+    getIndicatorInfo(): Map<string, IndicatorInfo>;                      // Get metadata for all indicators
+    getIndicatorsForCondition(conditionType: ConditionType): IndicatorInfo[]; // Get indicators for specific condition
+    getPreviousConditionMet(conditionType: ConditionType): boolean;      // Check if condition was met on previous bar
+    getTotalBars(): number;                                              // Get total number of bars in feed
 }
