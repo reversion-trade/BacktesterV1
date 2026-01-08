@@ -41,6 +41,7 @@ function createMinimalAlgoParams(overrides: Partial<AlgoParams> = {}): AlgoParam
         positionSize: { type: "REL", value: 0.1 },
         orderType: "MARKET",
         startingCapitalUSD: 10000,
+        timeout: { mode: "COOLDOWN_ONLY", cooldownBars: 0 },
         ...overrides,
     };
 }
@@ -96,7 +97,6 @@ function createMockDataLoadingResult(): DataLoadingResult {
                 capitalScaler: 1,
                 startTime: 1000,
                 endTime: 2000,
-                assumePositionImmediately: false,
                 closePositionOnExit: true,
                 launchTime: now,
                 status: "NEW",

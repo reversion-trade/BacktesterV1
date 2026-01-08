@@ -20,7 +20,6 @@
  * @audit-trail
  * - Created: 2026-01-01 (Sprint 2: Modularize Architecture)
  * - Purpose: Extract initialization logic from runSimulation()
- * - Handles assumePositionImmediately flag from RunSettings
  * - Follows architecture principle: "Stages should be separate and explicit"
  */
 
@@ -52,9 +51,6 @@ export interface InitializationResult {
 
     /** Initial capital in USD */
     initialCapital: number;
-
-    /** Whether to assume position immediately on first signal */
-    assumePositionImmediately: boolean;
 
     /** Whether to close position at end of backtest */
     closePositionOnExit: boolean;
@@ -128,11 +124,10 @@ export function executeInitialization(input: InitializationInput): Initializatio
     collector.registerIndicators(Array.from(indicatorInfoMap.values()));
 
     // Step 3: Determine initial state
-    // Currently always start FLAT; assumePositionImmediately affects edge detection
-    const initialState: PositionState = "FLAT";
+    // Always start CASH; TIMEOUT state handles re-entry control
+    const initialState: PositionState = "CASH";
 
     // Step 4: Extract run settings
-    const assumePositionImmediately = runSettings.assumePositionImmediately ?? false;
     const closePositionOnExit = runSettings.closePositionOnExit ?? true;
     const tradesLimit = runSettings.tradesLimit;
 
@@ -141,7 +136,6 @@ export function executeInitialization(input: InitializationInput): Initializatio
         indicatorInfoMap,
         initialState,
         initialCapital,
-        assumePositionImmediately,
         closePositionOnExit,
         tradesLimit,
         feeBps,

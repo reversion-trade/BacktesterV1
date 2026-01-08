@@ -39,7 +39,7 @@ import type { IDatabase, AlgoState, IndicatorStateSnapshot, EventQueryOptions } 
  *   type: "STATE_TRANSITION",
  *   timestamp: 1704067200,
  *   barIndex: 0,
- *   fromState: "FLAT",
+ *   fromState: "CASH",
  *   toState: "LONG",
  *   reason: "ENTRY_SIGNAL",
  * });

@@ -152,6 +152,7 @@ export function createMockAlgoParams(overrides: Partial<AlgoParams> = {}): AlgoP
         positionSize: createMockValueConfig(),
         orderType: "MARKET",
         startingCapitalUSD: 10000,
+        timeout: { mode: "COOLDOWN_ONLY", cooldownBars: 0 },
         ...overrides,
     };
 }

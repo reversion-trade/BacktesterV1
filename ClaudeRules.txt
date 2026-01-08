@@ -1,0 +1,46 @@
+Do not generate block comments for functions if they just repeat the function definition.
+For example:
+
+    /**
+     * Logs an execution error to the database.
+     * @param {ExecutionError} error - The error object containing error details
+     * @param {string} [orderId] - Optional order ID associated with the error
+     * @returns {Promise<ErrorRecord>} The created error record
+     */
+Should be removed completely as redundant. Everything said in the comment can be deduced from the function signature:
+
+    async logError(error: ExecutionError, orderId?: string): Promise<ErrorRecord> {
+        ...
+    }
+Do not generate single line comments that just "read" the line(s) of code following after.
+For example:
+
+    // Format size
+    const formattedSize = this.formatNumber(parseFloat(orderParams.sz.toString()), szDecimals);
+Should be without comment as it just regurgitates the variable name. Only comments that add non-trivial information (typically multiline) should be preserved.
+
+Do not introduce single-use local variables - inline their definition instead.
+For example:
+
+    // Verify the message
+    const isValid = await verifyMessage({
+        address: checksummedAddress,
+        message,
+        signature: signature as `0x${ string }`,
+    });
+    
+    return isValid;
+Should just be (remember rule #2 about redundant one-line comments too):
+
+    return await verifyMessage({
+        address: checksummedAddress,
+        message,
+        signature: signature as `0x${string}`,
+    });
+Monitor for unused local/private variables and remove them if found.
+
+General formatting rules:
+
+use 4 spaces instead of tabs for indentation;
+do not exceed 120 character per line of code;
+try to keep function definitions and calls in one line if there is space.

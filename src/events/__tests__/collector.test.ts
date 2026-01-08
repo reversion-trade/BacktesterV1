@@ -60,8 +60,8 @@ describe("EventCollector", () => {
             expect(ethCollector).toBeDefined();
         });
 
-        it("initializes with FLAT state", () => {
-            expect(collector.getCurrentState()).toBe("FLAT");
+        it("initializes with CASH state", () => {
+            expect(collector.getCurrentState()).toBe("CASH");
         });
 
         it("initializes with no current trade", () => {
@@ -521,31 +521,31 @@ describe("emitStateTransition", () => {
     });
 
     it("emits state transition event", () => {
-        collector.emitStateTransition(0, 1000, "FLAT", "LONG", "ENTRY_SIGNAL");
+        collector.emitStateTransition(0, 1000, "CASH", "LONG", "ENTRY_SIGNAL");
 
         const events = collector.getEvents();
         const stateEvents = events.algoEvents.filter((e) => e.type === "STATE_TRANSITION") as StateTransitionEvent[];
 
         expect(stateEvents.length).toBe(1);
-        expect(stateEvents[0]!.fromState).toBe("FLAT");
+        expect(stateEvents[0]!.fromState).toBe("CASH");
         expect(stateEvents[0]!.toState).toBe("LONG");
         expect(stateEvents[0]!.reason).toBe("ENTRY_SIGNAL");
     });
 
     it("updates current state", () => {
-        expect(collector.getCurrentState()).toBe("FLAT");
+        expect(collector.getCurrentState()).toBe("CASH");
 
-        collector.emitStateTransition(0, 1000, "FLAT", "LONG", "ENTRY_SIGNAL");
+        collector.emitStateTransition(0, 1000, "CASH", "LONG", "ENTRY_SIGNAL");
         expect(collector.getCurrentState()).toBe("LONG");
 
-        collector.emitStateTransition(1, 1001, "LONG", "FLAT", "EXIT_SIGNAL");
-        expect(collector.getCurrentState()).toBe("FLAT");
+        collector.emitStateTransition(1, 1001, "LONG", "CASH", "EXIT_SIGNAL");
+        expect(collector.getCurrentState()).toBe("CASH");
     });
 
     it("includes trade ID when in position", () => {
         // Enter position
         collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
-        collector.emitStateTransition(0, 1000, "FLAT", "LONG", "ENTRY_SIGNAL");
+        collector.emitStateTransition(0, 1000, "CASH", "LONG", "ENTRY_SIGNAL");
 
         const events = collector.getEvents();
         const stateEvent = events.algoEvents.find((e) => e.type === "STATE_TRANSITION") as StateTransitionEvent;
@@ -795,7 +795,7 @@ describe("reset", () => {
     });
 
     it("clears all events", () => {
-        collector.emitStateTransition(0, 1000, "FLAT", "LONG", "ENTRY_SIGNAL");
+        collector.emitStateTransition(0, 1000, "CASH", "LONG", "ENTRY_SIGNAL");
         collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
 
         const eventsBefore = collector.getEvents();
@@ -809,13 +809,13 @@ describe("reset", () => {
         expect(eventsAfter.swapEvents.length).toBe(0);
     });
 
-    it("resets state to FLAT", () => {
-        collector.emitStateTransition(0, 1000, "FLAT", "LONG", "ENTRY_SIGNAL");
+    it("resets state to CASH", () => {
+        collector.emitStateTransition(0, 1000, "CASH", "LONG", "ENTRY_SIGNAL");
         expect(collector.getCurrentState()).toBe("LONG");
 
         collector.reset();
 
-        expect(collector.getCurrentState()).toBe("FLAT");
+        expect(collector.getCurrentState()).toBe("CASH");
     });
 
     it("clears current trade ID", () => {

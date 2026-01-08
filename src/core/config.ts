@@ -15,6 +15,7 @@ import type {
     LadderParams,
     EntryCondition,
     ExitCondition,
+    TimeoutConfig,
 } from "./types.ts";
 
 export type { RunSettings };
@@ -89,6 +90,15 @@ export const ExitConditionSchema = z
     );
 
 /**
+ * Schema for TimeoutConfig validation
+ * Controls behavior after trade exits
+ */
+export const TimeoutConfigSchema = z.object({
+    mode: z.enum(["COOLDOWN_ONLY", "REGULAR", "STRICT"]),
+    cooldownBars: z.number().int().nonnegative(),
+});
+
+/**
  * Schema for AlgoParams validation
  */
 export const AlgoParamsSchema = z
@@ -102,6 +112,7 @@ export const AlgoParamsSchema = z
         positionSize: ValueConfigSchema,
         orderType: z.enum(["MARKET", "TWAP", "SMART", "LIMIT"]),
         startingCapitalUSD: z.number().positive(),
+        timeout: TimeoutConfigSchema,
     })
     .refine(
         (data) => {
@@ -148,7 +159,6 @@ export const RunSettingsSchema = z
         startTime: z.number().int().positive().optional(),
         endTime: z.number().int().positive().optional(),
         tradesLimit: z.number().int().positive().optional(),
-        assumePositionImmediately: z.boolean(),
         closePositionOnExit: z.boolean(),
         launchTime: z.number().int().positive(),
         status: z.enum(["NEW", "RUNNING", "DONE"]),
@@ -188,146 +198,15 @@ export const BacktestInputSchema = z.object({
 });
 
 // =============================================================================
-// LEGACY SCHEMA (for backward compatibility)
-// =============================================================================
-
-/**
- * Legacy BacktestConfig schema for backward compatibility
- * @deprecated Use BacktestInputSchema instead
- */
-export const BacktestConfigSchema = z
-    .object({
-        // Identification
-        backtestId: z.string().min(1),
-        algoId: z.string().min(1),
-        version: z.number().int().positive(),
-
-        // Algorithm parameters
-        algoParams: z.custom<AlgoParams>(),
-
-        // Market & Time Range
-        symbol: z.string().min(1),
-        startTime: z.number().int().positive(),
-        endTime: z.number().int().positive(),
-
-        // Capital & Position Sizing
-        startingCapitalUSD: z.number().positive(),
-        positionSize: z.object({
-            type: z.enum(["ABS", "REL"]),
-            value: z.number().positive(),
-        }),
-
-        // Run settings (moved from AlgoParams)
-        assumePositionImmediately: z.boolean().default(false),
-        closePositionOnExit: z.boolean().default(true),
-
-        // Trading Costs (optional - defaults provided)
-        feeBps: z.number().nonnegative().default(DEFAULT_FEE_BPS),
-        slippageBps: z.number().nonnegative().default(DEFAULT_SLIPPAGE_BPS),
-    })
-    .refine((data) => data.endTime > data.startTime, { message: "endTime must be after startTime" });
-
-// =============================================================================
 // TYPES (derived from schemas)
 // =============================================================================
 
-/**
- * New backtest input type (preferred)
- */
 export type BacktestInput = z.infer<typeof BacktestInputSchema>;
-
-/**
- * Legacy backtest config type (for backward compatibility)
- * @deprecated Use BacktestInput instead
- */
-export type BacktestConfig = z.infer<typeof BacktestConfigSchema>;
 
 // =============================================================================
 // VALIDATION FUNCTIONS
 // =============================================================================
 
-/**
- * Validate and parse backtest input (new format)
- */
 export function validateBacktestInput(input: unknown): BacktestInput {
     return BacktestInputSchema.parse(input);
-}
-
-/**
- * Validate and parse backtest config (legacy format)
- * @deprecated Use validateBacktestInput instead
- */
-export function validateBacktestConfig(input: unknown): BacktestConfig {
-    return BacktestConfigSchema.parse(input);
-}
-
-// =============================================================================
-// CONVERSION HELPERS
-// =============================================================================
-
-/**
- * Convert new BacktestInput to legacy BacktestConfig format
- * Useful for gradual migration
- */
-export function backfillLegacyConfig(input: BacktestInput): BacktestConfig {
-    const { algoConfig, runSettings, feeBps, slippageBps } = input;
-
-    return {
-        backtestId: runSettings.runID,
-        algoId: algoConfig.algoID,
-        version: algoConfig.version,
-        algoParams: algoConfig.params,
-        symbol: runSettings.coinSymbol,
-        startTime: runSettings.startTime!,
-        endTime: runSettings.endTime!,
-        startingCapitalUSD: algoConfig.params.startingCapitalUSD * runSettings.capitalScaler,
-        positionSize: {
-            type: algoConfig.params.positionSize.type === "DYN" ? "REL" : algoConfig.params.positionSize.type,
-            value: algoConfig.params.positionSize.value,
-        },
-        assumePositionImmediately: runSettings.assumePositionImmediately,
-        closePositionOnExit: runSettings.closePositionOnExit,
-        feeBps,
-        slippageBps,
-    };
-}
-
-/**
- * Convert legacy BacktestConfig to new BacktestInput format
- * Useful for migrating existing code
- */
-export function convertToBacktestInput(legacy: BacktestConfig): BacktestInput {
-    const now = Math.floor(Date.now() / 1000);
-
-    return {
-        algoConfig: {
-            userID: "legacy",
-            algoID: legacy.algoId,
-            algoName: legacy.algoId,
-            version: legacy.version,
-            params: {
-                ...legacy.algoParams,
-                orderType: "MARKET",
-                startingCapitalUSD: legacy.startingCapitalUSD,
-            },
-        },
-        runSettings: {
-            userID: "legacy",
-            algoID: legacy.algoId,
-            version: String(legacy.version),
-            runID: legacy.backtestId,
-            isBacktest: true,
-            coinSymbol: legacy.symbol,
-            capitalScaler: 1,
-            startTime: legacy.startTime,
-            endTime: legacy.endTime,
-            assumePositionImmediately: legacy.assumePositionImmediately,
-            closePositionOnExit: legacy.closePositionOnExit,
-            launchTime: now,
-            status: "NEW",
-            exchangeID: "backtest",
-        },
-        feeBps: legacy.feeBps,
-        slippageBps: legacy.slippageBps,
-    };
 }

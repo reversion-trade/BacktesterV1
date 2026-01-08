@@ -85,16 +85,3 @@ export type { TrailingStopConfig } from "./trailing-stop.ts";
 
 export { BalanceIndicator, createBalance, createBalanceWithDefaults } from "./balance.ts";
 export type { BalanceConfig } from "./balance.ts";
-
-// =============================================================================
-// REGISTRY
-// =============================================================================
-
-export {
-    SpecialIndicatorRegistry,
-    getSpecialIndicatorNames,
-    getSpecialIndicatorMetadata,
-    getSpecialIndicatorsByTag,
-    createSpecialIndicator,
-} from "./registry.ts";
-export type { SpecialIndicatorName } from "./registry.ts";

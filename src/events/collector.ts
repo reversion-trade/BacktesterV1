@@ -66,7 +66,7 @@ export class EventCollector {
     private algoEvents: AlgoEvent[] = [];
     private swapEvents: SwapEvent[] = [];
     private conditionStates: Map<ConditionType, ConditionState> = new Map();
-    private currentPositionState: PositionState = "FLAT";
+    private currentPositionState: PositionState = "CASH";
     private nextTradeId: number = 1;
     private nextSwapId: number = 1;
     private pendingEntrySwap: SwapEvent | null = null;
@@ -525,7 +525,7 @@ export class EventCollector {
         this.algoEvents = [];
         this.swapEvents = [];
         this.conditionStates.clear();
-        this.currentPositionState = "FLAT";
+        this.currentPositionState = "CASH";
         this.nextTradeId = 1;
         this.nextSwapId = 1;
         this.pendingEntrySwap = null;

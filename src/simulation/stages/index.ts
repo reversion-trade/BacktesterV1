@@ -42,7 +42,7 @@
  * │  Stage 5: Simulation Loop                                       │
  * │  ────────────────────────                                       │
  * │  Forward pass through candles, emit events                      │
- * │  Output: SimulationResult (from loop.ts)                        │
+ * │  Output: SimulationResult                                        │
  * └─────────────────────────────────────────────────────────────────┘
  *                               ↓
  * ┌─────────────────────────────────────────────────────────────────┐
@@ -129,10 +129,9 @@ export {
 } from "./initialization.ts";
 
 // =============================================================================
-// STAGE 5: SIMULATION LOOP
-// Re-exported from loop.ts for completeness
+// STAGE 5: SIMULATION TYPES
 // =============================================================================
-export { runSimulation, type SimulationConfig, type SimulationResult, type EquityPoint } from "../loop.ts";
+export type { SimulationResult, EquityPoint } from "../../output/types.ts";
 
 // =============================================================================
 // STAGE 5 (ALTERNATIVE): INTERFACE-BASED SIMULATION
@@ -174,7 +173,7 @@ import { executeIndicatorCalculation, createIndicatorInputFromDataResult } from 
 import { executeResampling, createResamplingInput } from "./resampling.ts";
 import { executeInitialization } from "./initialization.ts";
 import { executeOutputGeneration, createEmptyBacktestOutput } from "./output.ts";
-import { type SimulationResult, type EquityPoint } from "../loop.ts";
+import { type SimulationResult, type EquityPoint } from "../../output/types.ts";
 
 // Interface-based imports for DI pipeline
 import { runBacktestWithAlgoRunner, type AlgoRunnerConfig } from "../algo-runner.ts";
@@ -268,7 +267,6 @@ export async function runBacktestPipeline(candles: Candle[], input: BacktestInpu
     const algoConfig: AlgoRunnerConfig = {
         algoParams: initResult.algoParams,
         symbol: initResult.symbol,
-        assumePositionImmediately: initResult.assumePositionImmediately,
         tradesLimit: initResult.tradesLimit,
         warmupBars: resamplingResult.warmupBars,
     };

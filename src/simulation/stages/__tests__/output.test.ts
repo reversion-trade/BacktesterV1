@@ -19,7 +19,7 @@ import {
 } from "../output.ts";
 import type { BacktestOutput, TradeEvent, AlgoEvent, SwapEvent } from "../../../events/types.ts";
 import type { BacktestInput } from "../../../core/config.ts";
-import type { SimulationResult, EquityPoint } from "../../loop.ts";
+import type { SimulationResult, EquityPoint } from "../../../output/types.ts";
 import type { DataLoadingResult } from "../data-loading.ts";
 import type { AlgoParams, Candle, Direction } from "../../../core/types.ts";
 
@@ -45,6 +45,7 @@ function createMinimalAlgoParams(): AlgoParams {
         positionSize: { type: "REL", value: 0.1 },
         orderType: "MARKET",
         startingCapitalUSD: 10000,
+        timeout: { mode: "COOLDOWN_ONLY", cooldownBars: 0 },
     };
 }
 
@@ -135,7 +136,7 @@ function createMockSimulationResult(overrides: Partial<SimulationResult> = {}): 
         algoEvents: [],
         equityCurve: [createMockEquityPoint()],
         finalEquity: 10000,
-        finalState: "FLAT",
+        finalState: "CASH",
         ...overrides,
     };
 }
@@ -161,7 +162,6 @@ function createMockDataLoadingResult(): DataLoadingResult {
                 capitalScaler: 1,
                 startTime: 1000,
                 endTime: 2000,
-                assumePositionImmediately: false,
                 closePositionOnExit: true,
                 launchTime: now,
                 status: "NEW",
@@ -198,7 +198,6 @@ function createMockBacktestInput(): BacktestInput {
             capitalScaler: 1,
             startTime: 1000,
             endTime: 2000,
-            assumePositionImmediately: false,
             closePositionOnExit: true,
             launchTime: now,
             status: "NEW",

@@ -42,8 +42,6 @@ export interface AlgoRunnerConfig {
     algoParams: AlgoParams;
     /** Asset symbol */
     symbol: string;
-    /** Enter on first signal without waiting for edge */
-    assumePositionImmediately?: boolean;
     /** Maximum trades allowed (undefined = unlimited) */
     tradesLimit?: number;
     /** Number of warmup bars to skip */
@@ -135,12 +133,11 @@ export class AlgoRunner {
         this.database = database;
         this.indicatorFeed = indicatorFeed;
         this.config = {
-            assumePositionImmediately: false,
             warmupBars: 0,
             ...config,
         };
         this.state = {
-            positionState: "FLAT",
+            positionState: "CASH",
             tradeCount: 0,
             currentBarIndex: 0,
             stopLoss: null,
@@ -173,7 +170,7 @@ export class AlgoRunner {
 
         const isWarmupPeriod = barIndex < (this.config.warmupBars ?? 0);
 
-        if (this.state.positionState !== "FLAT") {
+        if (this.state.positionState !== "CASH") {
             const exitResult = await this.checkExit(candle, barIndex);
             if (exitResult) {
                 exitOccurred = true;
@@ -183,7 +180,7 @@ export class AlgoRunner {
             }
         }
 
-        if (this.state.positionState === "FLAT" && !isWarmupPeriod) {
+        if (this.state.positionState === "CASH" && !isWarmupPeriod) {
             const entryResult = await this.checkEntry(candle, barIndex);
             if (entryResult) {
                 entryOccurred = true;
@@ -207,7 +204,7 @@ export class AlgoRunner {
      * Called at end of backtest or when stopping live trading.
      */
     async closePosition(candle: Candle, barIndex: number, reason: string): Promise<boolean> {
-        if (this.state.positionState === "FLAT") {
+        if (this.state.positionState === "CASH") {
             return false;
         }
 
@@ -232,11 +229,11 @@ export class AlgoRunner {
             barIndex,
             candle.bucket,
             this.state.positionState,
-            "FLAT",
+            "CASH",
             reason as "END_OF_BACKTEST" | "EXIT_SIGNAL"
         );
 
-        this.state.positionState = "FLAT";
+        this.state.positionState = "CASH";
         this.state.tradeCount++;
 
         return true;
@@ -261,7 +258,7 @@ export class AlgoRunner {
      */
     reset(): void {
         this.state = {
-            positionState: "FLAT",
+            positionState: "CASH",
             tradeCount: 0,
             currentBarIndex: 0,
             stopLoss: null,
@@ -353,14 +350,11 @@ export class AlgoRunner {
     }
 
     private checkConditionTrigger(conditionType: ConditionType): boolean {
+        // Edge detection is removed - TIMEOUT state handles re-entry control
+        // For now, just return the current condition state
+        // Phase 2-4 will implement proper TIMEOUT state handling
         const snapshot = this.indicatorFeed.getConditionSnapshot(conditionType);
-        const previousMet = this.indicatorFeed.getPreviousConditionMet(conditionType);
-
-        if (this.config.assumePositionImmediately) {
-            return snapshot.conditionMet;
-        } else {
-            return !previousMet && snapshot.conditionMet;
-        }
+        return snapshot.conditionMet;
     }
 
     private async enterPosition(direction: Direction, candle: Candle, barIndex: number): Promise<void> {
@@ -378,7 +372,7 @@ export class AlgoRunner {
         });
 
         const newState: PositionState = direction === "LONG" ? "LONG" : "SHORT";
-        await this.logStateTransition(barIndex, candle.bucket, "FLAT", newState, "ENTRY_SIGNAL");
+        await this.logStateTransition(barIndex, candle.bucket, "CASH", newState, "ENTRY_SIGNAL");
         this.state.positionState = newState;
         this.state.entryPrice = candle.close;
 
@@ -439,12 +433,12 @@ export class AlgoRunner {
             tradeDirection: positionDirection,
         });
 
-        await this.logStateTransition(barIndex, candle.bucket, this.state.positionState, "FLAT", reason);
+        await this.logStateTransition(barIndex, candle.bucket, this.state.positionState, "CASH", reason);
 
         const conditionType: ConditionType = this.state.positionState === "LONG" ? "LONG_EXIT" : "SHORT_EXIT";
         await this.logConditionChange(barIndex, candle.bucket, conditionType, true);
 
-        this.state.positionState = "FLAT";
+        this.state.positionState = "CASH";
         this.state.tradeCount++;
 
         this.state.stopLoss = null;
@@ -590,7 +584,7 @@ export async function runBacktestWithAlgoRunner(
         const result = await algo.onBar(candle, i);
         barResults.push(result);
 
-        if (isLastCandle && closePositionOnExit && algo.getPositionState() !== "FLAT") {
+        if (isLastCandle && closePositionOnExit && algo.getPositionState() !== "CASH") {
             await algo.closePosition(candle, i, "END_OF_BACKTEST");
         }
     }

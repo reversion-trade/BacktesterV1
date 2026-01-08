@@ -51,6 +51,7 @@ function createMinimalBacktestInput(overrides: {
                 positionSize: { type: "REL", value: 0.1 },
                 orderType: "MARKET",
                 startingCapitalUSD: overrides.startingCapitalUSD ?? 10000,
+                timeout: { mode: "COOLDOWN_ONLY", cooldownBars: 0 },
             },
         },
         runSettings: {
@@ -63,7 +64,6 @@ function createMinimalBacktestInput(overrides: {
             capitalScaler: overrides.capitalScaler ?? 1,
             startTime: overrides.startTime ?? 1,
             endTime: overrides.endTime ?? 1000,
-            assumePositionImmediately: false,
             closePositionOnExit: true,
             launchTime: now,
             status: "NEW",
@@ -81,6 +81,7 @@ function createMinimalAlgoParams(overrides: Partial<AlgoParams> = {}): AlgoParam
         positionSize: { type: "REL", value: 0.1 },
         orderType: "MARKET",
         startingCapitalUSD: 10000,
+        timeout: { mode: "COOLDOWN_ONLY", cooldownBars: 0 },
         ...overrides,
     };
 }
@@ -297,7 +298,6 @@ describe("executeDataLoading", () => {
                 capitalScaler: 1,
                 startTime: 1,
                 endTime: 100,
-                assumePositionImmediately: false,
                 closePositionOnExit: true,
                 launchTime: Date.now(),
                 status: "NEW" as const,

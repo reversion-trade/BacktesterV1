@@ -27,7 +27,7 @@ import type { BacktestOutput, SwapMetrics, AlgoMetrics, TradeEvent, AlgoEvent, S
 import type { BacktestInput } from "../../core/config.ts";
 import { calculateSwapMetrics } from "../../output/swap-metrics.ts";
 import { calculateAlgoMetrics } from "../../output/algo-metrics.ts";
-import type { SimulationResult, EquityPoint } from "../loop.ts";
+import type { SimulationResult, EquityPoint } from "../../output/types.ts";
 import type { DataLoadingResult } from "./data-loading.ts";
 
 // =============================================================================

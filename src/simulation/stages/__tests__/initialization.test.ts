@@ -45,6 +45,7 @@ function createMinimalAlgoParams(overrides: Partial<AlgoParams> = {}): AlgoParam
         positionSize: { type: "REL", value: 0.1 },
         orderType: "MARKET",
         startingCapitalUSD: 10000,
+        timeout: { mode: "COOLDOWN_ONLY", cooldownBars: 0 },
         ...overrides,
     };
 }
@@ -70,7 +71,6 @@ function createMockDataLoadingResult(overrides: Partial<DataLoadingResult> = {})
                 capitalScaler: 1,
                 startTime: 1000,
                 endTime: 2000,
-                assumePositionImmediately: false,
                 closePositionOnExit: true,
                 launchTime: now,
                 status: "NEW",
@@ -139,9 +139,8 @@ function createMockInitializationResult(overrides: Partial<InitializationResult>
     return {
         collector: new EventCollector("BTC"),
         indicatorInfoMap: new Map(),
-        initialState: "FLAT",
+        initialState: "CASH",
         initialCapital: 10000,
-        assumePositionImmediately: false,
         closePositionOnExit: true,
         feeBps: 10,
         slippageBps: 5,
@@ -169,7 +168,7 @@ describe("executeInitialization", () => {
         expect(result.collector).toBeInstanceOf(EventCollector);
     });
 
-    it("sets initial state to FLAT", () => {
+    it("sets initial state to CASH", () => {
         const input: InitializationInput = {
             dataResult: createMockDataLoadingResult(),
             resamplingResult: createMockResamplingResult(),
@@ -177,7 +176,7 @@ describe("executeInitialization", () => {
 
         const result = executeInitialization(input);
 
-        expect(result.initialState).toBe("FLAT");
+        expect(result.initialState).toBe("CASH");
     });
 
     it("preserves initial capital from data result", () => {
@@ -192,20 +191,6 @@ describe("executeInitialization", () => {
         const result = executeInitialization(input);
 
         expect(result.initialCapital).toBe(25000);
-    });
-
-    it("extracts assumePositionImmediately from run settings", () => {
-        const dataResult = createMockDataLoadingResult();
-        dataResult.validatedInput.runSettings.assumePositionImmediately = true;
-
-        const input: InitializationInput = {
-            dataResult,
-            resamplingResult: createMockResamplingResult(),
-        };
-
-        const result = executeInitialization(input);
-
-        expect(result.assumePositionImmediately).toBe(true);
     });
 
     it("extracts closePositionOnExit from run settings", () => {
@@ -683,7 +668,6 @@ describe("InitializationResult structure", () => {
         expect(result).toHaveProperty("indicatorInfoMap");
         expect(result).toHaveProperty("initialState");
         expect(result).toHaveProperty("initialCapital");
-        expect(result).toHaveProperty("assumePositionImmediately");
         expect(result).toHaveProperty("closePositionOnExit");
         expect(result).toHaveProperty("feeBps");
         expect(result).toHaveProperty("slippageBps");

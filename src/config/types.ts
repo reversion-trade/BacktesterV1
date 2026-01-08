@@ -113,8 +113,6 @@ export interface CreateRunSettingsInput {
     capitalScaler?: number;
     /** Trade limit (optional) */
     tradesLimit?: number;
-    /** Assume position immediately (default: false) */
-    assumePositionImmediately?: boolean;
     /** Close position on exit (default: true) */
     closePositionOnExit?: boolean;
 }

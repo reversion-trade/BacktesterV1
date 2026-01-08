@@ -365,13 +365,14 @@ function calculateStateDistribution(
     const sortedEvents = [...stateEvents].sort((a, b) => a.barIndex - b.barIndex);
 
     const stateDurations: Record<string, number[]> = {
-        FLAT: [],
+        CASH: [],
         LONG: [],
         SHORT: [],
+        TIMEOUT: [],
     };
 
     let lastBar = 0;
-    let currentState = "FLAT";
+    let currentState = "CASH";
 
     for (const event of sortedEvents) {
         const duration = event.barIndex - lastBar;
@@ -387,20 +388,26 @@ function calculateStateDistribution(
         stateDurations[currentState]!.push(finalDuration);
     }
 
-    const flatDurations = stateDurations["FLAT"]!;
+    const cashDurations = stateDurations["CASH"]!;
     const longDurations = stateDurations["LONG"]!;
     const shortDurations = stateDurations["SHORT"]!;
+    const timeoutDurations = stateDurations["TIMEOUT"]!;
 
-    const totalFlat = sum(flatDurations);
+    const totalCash = sum(cashDurations);
     const totalLong = sum(longDurations);
     const totalShort = sum(shortDurations);
-    const totalTime = totalFlat + totalLong + totalShort;
+    const totalTimeout = sum(timeoutDurations);
+    const totalTime = totalCash + totalLong + totalShort + totalTimeout;
+
+    // Note: pctTimeFlat renamed to pctTimeCash for new 4-state model
+    // TIMEOUT time is merged with CASH for backward compatibility
+    const totalFlat = totalCash + totalTimeout;
 
     return {
         pctTimeFlat: totalTime > 0 ? totalFlat / totalTime : 1,
         pctTimeLong: totalTime > 0 ? totalLong / totalTime : 0,
         pctTimeShort: totalTime > 0 ? totalShort / totalTime : 0,
-        avgTimeFlatBars: flatDurations.length > 0 ? mean(flatDurations) : 0,
+        avgTimeFlatBars: cashDurations.length > 0 ? mean(cashDurations) : 0,
         avgTimeLongBars: longDurations.length > 0 ? mean(longDurations) : 0,
         avgTimeShortBars: shortDurations.length > 0 ? mean(shortDurations) : 0,
     };
@@ -423,7 +430,8 @@ function calculateExitReasonBreakdown(stateEvents: StateTransitionEvent[]): Algo
     };
 
     for (const event of stateEvents) {
-        if (event.toState === "FLAT") {
+        // Check for exits to CASH or TIMEOUT (position closed)
+        if (event.toState === "CASH" || event.toState === "TIMEOUT") {
             switch (event.reason) {
                 case "EXIT_SIGNAL":
                     breakdown.signal++;

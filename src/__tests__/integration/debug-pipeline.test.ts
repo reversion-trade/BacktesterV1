@@ -87,6 +87,7 @@ describe("Debug Full Pipeline", () => {
             orderType: "MARKET",
             startingCapitalUSD: 10000,
             coinSymbol: "BTC",
+            timeout: { mode: "COOLDOWN_ONLY", cooldownBars: 0 },
         };
 
         const algoConfig: AlgoConfig = {
@@ -107,14 +108,13 @@ describe("Debug Full Pipeline", () => {
             capitalScaler: 1,
             startTime: candles[0]!.bucket,
             endTime: candles[candles.length - 1]!.bucket,
-            assumePositionImmediately: true,
             closePositionOnExit: true,
             launchTime: Date.now(),
             status: "NEW",
             exchangeID: "backtest",
         };
 
-        const input: BacktestInput = { algoConfig, runSettings };
+        const input: BacktestInput = { algoConfig, runSettings, feeBps: 10, slippageBps: 5 };
 
         // Stage 1
         const dataResult = executeDataLoading(candles, input);
@@ -214,7 +214,6 @@ describe("Debug Full Pipeline", () => {
             {
                 algoParams: initResult.algoParams,
                 symbol: initResult.symbol,
-                assumePositionImmediately: initResult.assumePositionImmediately,
                 tradesLimit: initResult.tradesLimit,
                 warmupBars: resamplingResult.warmupBars,
             },

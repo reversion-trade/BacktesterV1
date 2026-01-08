@@ -19,9 +19,6 @@ import {
     BalanceIndicator,
     createBalance,
     createBalanceWithDefaults,
-    createSpecialIndicator,
-    getSpecialIndicatorNames,
-    getSpecialIndicatorsByTag,
 } from "../special-indicators/index.ts";
 
 // =============================================================================
@@ -493,36 +490,6 @@ describe("BalanceIndicator", () => {
     });
 });
 
-// =============================================================================
-// REGISTRY
-// =============================================================================
-
-describe("Special Indicator Registry", () => {
-    test("returns all indicator names", () => {
-        const names = getSpecialIndicatorNames();
-        expect(names).toContain("StopLoss");
-        expect(names).toContain("TakeProfit");
-        expect(names).toContain("TrailingStop");
-        expect(names).toContain("Balance");
-    });
-
-    test("finds indicators by tag", () => {
-        const riskIndicators = getSpecialIndicatorsByTag("Risk Management");
-        expect(riskIndicators).toContain("StopLoss");
-        expect(riskIndicators).toContain("TrailingStop");
-    });
-
-    test("creates indicator via registry", () => {
-        const sl = createSpecialIndicator("StopLoss", {
-            direction: "LONG",
-            stopLoss: { type: "REL", value: 0.02 },
-        });
-
-        expect(sl).toBeInstanceOf(StopLossIndicator);
-        sl.reset(50000, 1000);
-        expect(sl.getStopLossPrice()).toBe(49000);
-    });
-});
 
 // =============================================================================
 // BASE CLASS FUNCTIONALITY
@@ -559,35 +526,3 @@ describe("BaseSpecialIndicator", () => {
     });
 });
 
-// =============================================================================
-// ZOD VALIDATION
-// =============================================================================
-
-describe("Zod Validation", () => {
-    test("rejects invalid direction", () => {
-        expect(() =>
-            createSpecialIndicator("StopLoss", {
-                direction: "INVALID" as any,
-                stopLoss: { type: "REL", value: 0.02 },
-            })
-        ).toThrow();
-    });
-
-    test("rejects negative value", () => {
-        expect(() =>
-            createSpecialIndicator("StopLoss", {
-                direction: "LONG",
-                stopLoss: { type: "REL", value: -0.02 },
-            })
-        ).toThrow();
-    });
-
-    test("rejects invalid value type", () => {
-        expect(() =>
-            createSpecialIndicator("StopLoss", {
-                direction: "LONG",
-                stopLoss: { type: "INVALID" as any, value: 0.02 },
-            })
-        ).toThrow();
-    });
-});

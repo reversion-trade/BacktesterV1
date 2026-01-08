@@ -30,7 +30,7 @@ import type { AlgoEvent, SwapEvent, ConditionSnapshot, ConditionType } from "../
  * Current algorithm state that needs to be persisted.
  */
 export interface AlgoState {
-    /** Current position state (FLAT, LONG, SHORT) */
+    /** Current position state (CASH, LONG, SHORT, TIMEOUT) */
     positionState: PositionState;
     /** Current trade ID (increments on each new position) */
     currentTradeId: number;
@@ -112,7 +112,7 @@ export interface EventQueryOptions {
  *
  *   await this.database.logAlgoEvent({
  *     type: "STATE_TRANSITION",
- *     fromState: "FLAT",
+ *     fromState: "CASH",
  *     toState: "LONG",
  *     // ...
  *   });

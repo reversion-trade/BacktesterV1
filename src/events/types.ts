@@ -179,7 +179,7 @@ export interface ConditionChangeEvent extends AlgoEventBase {
 
 /**
  * Position state machine transition.
- * FLAT → LONG, LONG → FLAT, etc.
+ * CASH → LONG, LONG → TIMEOUT → CASH, etc.
  */
 export interface StateTransitionEvent extends AlgoEventBase {
     type: "STATE_TRANSITION";

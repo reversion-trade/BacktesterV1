@@ -198,13 +198,7 @@ class MockIndicatorFeed implements IIndicatorFeed {
         this.conditionSnapshots.set(type, snapshot);
     }
 
-    setPreviousConditionMet(type: ConditionType, met: boolean): void {
-        this.previousConditionMet.set(type, met);
-    }
-
     setCurrentBar(barIndex: number, _timestamp: number): void {
-        // Note: previousConditionMet should be set explicitly by tests before calling onBar
-        // This allows precise control over edge detection testing
         this.currentBarIndex = barIndex;
     }
 
@@ -304,6 +298,7 @@ function createAlgoParams(overrides: Partial<AlgoParams> = {}): AlgoParams {
         positionSize: { type: "REL", value: 0.1 },
         orderType: "MARKET",
         startingCapitalUSD: 10000,
+        timeout: { mode: "COOLDOWN_ONLY", cooldownBars: 0 },
         ...overrides,
     };
 }
@@ -336,15 +331,15 @@ describe("AlgoRunner", () => {
             const algo = new AlgoRunner(executor, database, indicatorFeed, createConfig());
 
             expect(algo).toBeDefined();
-            expect(algo.getPositionState()).toBe("FLAT");
+            expect(algo.getPositionState()).toBe("CASH");
             expect(algo.getTradeCount()).toBe(0);
         });
 
         it("applies default config values", () => {
             const algo = new AlgoRunner(executor, database, indicatorFeed, createConfig());
 
-            // Should start FLAT
-            expect(algo.getPositionState()).toBe("FLAT");
+            // Should start CASH
+            expect(algo.getPositionState()).toBe("CASH");
         });
 
         it("accepts custom config values", () => {
@@ -390,7 +385,7 @@ describe("AlgoRunner", () => {
                 expect(result.entryOccurred).toBe(false);
             }
 
-            expect(algo.getPositionState()).toBe("FLAT");
+            expect(algo.getPositionState()).toBe("CASH");
         });
 
         it("checks entry after warmup", async () => {
@@ -400,8 +395,7 @@ describe("AlgoRunner", () => {
                 indicatorFeed,
                 createConfig({
                     warmupBars: 2,
-                    assumePositionImmediately: true,
-                })
+                                    })
             );
 
             indicatorFeed.setConditionSnapshot("LONG_ENTRY", {
@@ -416,7 +410,7 @@ describe("AlgoRunner", () => {
             // Bar 0 and 1 are warmup
             await algo.onBar(createCandle(1000, 42000), 0);
             await algo.onBar(createCandle(1001, 42000), 1);
-            expect(algo.getPositionState()).toBe("FLAT");
+            expect(algo.getPositionState()).toBe("CASH");
 
             // Bar 2 should trigger entry
             const result = await algo.onBar(createCandle(1002, 42000), 2);
@@ -445,7 +439,7 @@ describe("AlgoRunner", () => {
     });
 
     describe("entry conditions", () => {
-        it("enters LONG when condition met (edge detection)", async () => {
+        it("enters LONG when condition becomes met", async () => {
             const algo = new AlgoRunner(executor, database, indicatorFeed, createConfig());
 
             // Bar 0: condition not met
@@ -459,8 +453,7 @@ describe("AlgoRunner", () => {
             });
             await algo.onBar(createCandle(1000, 42000), 0);
 
-            // Bar 1: condition becomes met (edge: false → true)
-            indicatorFeed.setPreviousConditionMet("LONG_ENTRY", false); // Explicitly set previous state
+            // Bar 1: condition becomes met
             indicatorFeed.setConditionSnapshot("LONG_ENTRY", {
                 requiredTrue: 1,
                 requiredTotal: 1,
@@ -475,48 +468,12 @@ describe("AlgoRunner", () => {
             expect(algo.getPositionState()).toBe("LONG");
         });
 
-        it("does not enter when condition already met (no edge)", async () => {
-            const algo = new AlgoRunner(executor, database, indicatorFeed, createConfig());
-
-            // Both bars: condition met
-            indicatorFeed.setConditionSnapshot("LONG_ENTRY", {
-                requiredTrue: 1,
-                requiredTotal: 1,
-                optionalTrue: 0,
-                optionalTotal: 0,
-                conditionMet: true,
-                distanceFromTrigger: 0,
-            });
-
-            // Bar 0: enters
-            await algo.onBar(createCandle(1000, 42000), 0);
-
-            // Exit the position
-            indicatorFeed.setConditionSnapshot("LONG_EXIT", {
-                requiredTrue: 1,
-                requiredTotal: 1,
-                optionalTrue: 0,
-                optionalTotal: 0,
-                conditionMet: true,
-                distanceFromTrigger: 0,
-            });
-            await algo.onBar(createCandle(1001, 42500), 1);
-
-            // Bar 2: condition still met but no edge
-            indicatorFeed.setPreviousConditionMet("LONG_ENTRY", true);
-            const result = await algo.onBar(createCandle(1002, 42000), 2);
-
-            expect(result.entryOccurred).toBe(false);
-        });
-
-        it("enters immediately when assumePositionImmediately is true", async () => {
+        it("enters when condition is met (no edge detection)", async () => {
             const algo = new AlgoRunner(
                 executor,
                 database,
                 indicatorFeed,
-                createConfig({
-                    assumePositionImmediately: true,
-                })
+                createConfig()
             );
 
             indicatorFeed.setConditionSnapshot("LONG_ENTRY", {
@@ -541,7 +498,6 @@ describe("AlgoRunner", () => {
                 indicatorFeed,
                 createConfig({
                     tradesLimit: 1,
-                    assumePositionImmediately: true, // Simplify by not requiring edge detection
                 })
             );
 
@@ -577,7 +533,7 @@ describe("AlgoRunner", () => {
             await algo.onBar(createCandle(1001, 42500), 1);
 
             expect(algo.getTradeCount()).toBe(1);
-            expect(algo.getPositionState()).toBe("FLAT");
+            expect(algo.getPositionState()).toBe("CASH");
 
             // Try second trade - should be blocked by tradesLimit
             indicatorFeed.setConditionSnapshot("LONG_ENTRY", {
@@ -591,7 +547,7 @@ describe("AlgoRunner", () => {
             const result = await algo.onBar(createCandle(1002, 42000), 2);
 
             expect(result.entryOccurred).toBe(false);
-            expect(algo.getPositionState()).toBe("FLAT");
+            expect(algo.getPositionState()).toBe("CASH");
         });
     });
 
@@ -602,8 +558,7 @@ describe("AlgoRunner", () => {
                 database,
                 indicatorFeed,
                 createConfig({
-                    assumePositionImmediately: true,
-                })
+                                    })
             );
 
             // Enter position
@@ -638,7 +593,7 @@ describe("AlgoRunner", () => {
             const result = await algo.onBar(createCandle(1001, 42500), 1);
 
             expect(result.exitOccurred).toBe(true);
-            expect(algo.getPositionState()).toBe("FLAT");
+            expect(algo.getPositionState()).toBe("CASH");
         });
 
         it("increments trade count on exit", async () => {
@@ -647,8 +602,7 @@ describe("AlgoRunner", () => {
                 database,
                 indicatorFeed,
                 createConfig({
-                    assumePositionImmediately: true,
-                })
+                                    })
             );
 
             expect(algo.getTradeCount()).toBe(0);
@@ -687,8 +641,7 @@ describe("AlgoRunner", () => {
                 database,
                 indicatorFeed,
                 createConfig({
-                    assumePositionImmediately: true,
-                })
+                                    })
             );
 
             // Enter
@@ -707,7 +660,7 @@ describe("AlgoRunner", () => {
             const closed = await algo.closePosition(createCandle(1001, 42500), 1, "END_OF_BACKTEST");
 
             expect(closed).toBe(true);
-            expect(algo.getPositionState()).toBe("FLAT");
+            expect(algo.getPositionState()).toBe("CASH");
         });
 
         it("returns false when already flat", async () => {
@@ -724,8 +677,7 @@ describe("AlgoRunner", () => {
                 database,
                 indicatorFeed,
                 createConfig({
-                    assumePositionImmediately: true,
-                })
+                                    })
             );
 
             // Enter
@@ -753,8 +705,7 @@ describe("AlgoRunner", () => {
                 database,
                 indicatorFeed,
                 createConfig({
-                    assumePositionImmediately: true,
-                })
+                                    })
             );
 
             indicatorFeed.setConditionSnapshot("LONG_ENTRY", {
@@ -770,7 +721,7 @@ describe("AlgoRunner", () => {
 
             algo.reset();
 
-            expect(algo.getPositionState()).toBe("FLAT");
+            expect(algo.getPositionState()).toBe("CASH");
             expect(algo.getTradeCount()).toBe(0);
         });
     });
@@ -782,8 +733,7 @@ describe("AlgoRunner", () => {
                 database,
                 indicatorFeed,
                 createConfig({
-                    assumePositionImmediately: true,
-                })
+                                    })
             );
 
             indicatorFeed.setConditionSnapshot("LONG_ENTRY", {
@@ -807,8 +757,7 @@ describe("AlgoRunner", () => {
                 database,
                 indicatorFeed,
                 createConfig({
-                    assumePositionImmediately: true,
-                })
+                                    })
             );
 
             // Enter
@@ -853,8 +802,7 @@ describe("AlgoRunner", () => {
                 database,
                 indicatorFeed,
                 createConfig({
-                    assumePositionImmediately: true,
-                })
+                                    })
             );
 
             indicatorFeed.setConditionSnapshot("LONG_ENTRY", {
@@ -877,8 +825,7 @@ describe("AlgoRunner", () => {
                 database,
                 indicatorFeed,
                 createConfig({
-                    assumePositionImmediately: true,
-                })
+                                    })
             );
 
             indicatorFeed.setConditionSnapshot("LONG_ENTRY", {
@@ -966,11 +913,11 @@ describe("runBacktestWithAlgoRunner", () => {
             database,
             indicatorFeed,
             candles,
-            createConfig({ assumePositionImmediately: true }),
+            createConfig(),
             true // closePositionOnExit
         );
 
-        expect(result.finalPositionState).toBe("FLAT");
+        expect(result.finalPositionState).toBe("CASH");
         expect(result.totalTrades).toBe(1);
     });
 
@@ -991,7 +938,7 @@ describe("runBacktestWithAlgoRunner", () => {
             database,
             indicatorFeed,
             candles,
-            createConfig({ assumePositionImmediately: true }),
+            createConfig(),
             false // closePositionOnExit
         );
 
@@ -1032,7 +979,7 @@ describe("runBacktestWithAlgoRunner", () => {
             database,
             indicatorFeed,
             candles,
-            createConfig({ assumePositionImmediately: true }),
+            createConfig(),
             true
         );
 

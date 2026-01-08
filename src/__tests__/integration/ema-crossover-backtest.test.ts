@@ -144,6 +144,7 @@ function createEMACrossoverAlgoParams(
         orderType: "MARKET",
         startingCapitalUSD: 10000,
         coinSymbol: "BTC",
+        timeout: { mode: "COOLDOWN_ONLY", cooldownBars: 0 },
     };
 }
 
@@ -168,7 +169,6 @@ function createRunSettings(algoConfig: AlgoConfig, startTime: number, endTime: n
         capitalScaler: 1,
         startTime,
         endTime,
-        assumePositionImmediately: true,
         closePositionOnExit: true,
         launchTime: Math.floor(Date.now() / 1000),
         status: "NEW",
@@ -215,6 +215,8 @@ describe("EMA Crossover Backtest", () => {
         const input: BacktestInput = {
             algoConfig,
             runSettings,
+            feeBps: 10,
+            slippageBps: 5,
         };
 
         // Run the pipeline
@@ -346,6 +348,8 @@ describe("EMA Crossover Backtest", () => {
         const input: BacktestInput = {
             algoConfig,
             runSettings,
+            feeBps: 10,
+            slippageBps: 5,
         };
 
         const output = await runBacktestPipeline(subset, input);
