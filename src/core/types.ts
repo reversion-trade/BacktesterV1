@@ -86,7 +86,7 @@ export interface AlgoParams {
     timeout: TimeoutConfig; // how should i config my timeout
 }
 
-// Wraps AlgoParams with identification and versioning.
+// Wraps AlgoParams with identification and versioning - basically it identifies what strat to tradev
 export interface AlgoConfig {
     userID: string;
     algoID: string;
@@ -96,40 +96,23 @@ export interface AlgoConfig {
 }
 
 
-/**
- * Configuration for a specific run (backtest or live trading).
- * Separates execution config from algorithm definition.
- */
+//Configuration for a specific run (backtest or live trading) "How / when to run a given strat" - @yuri consider whether i should exclude the some of the fields such as closepositiononexit, exchangeID etc. This is defined simiar
+//to the main types file with most of the fields as pass throughs.
 export interface RunSettings {
     userID: string;
     /** A pair of algoID + version reference a unique read-only AlgoConfig */
     algoID: string;
     version: string;
     runID: string;
-    /** Whether this is a live trading algo or a backtest simulation */
-    isBacktest: boolean;
-    /** Autofilled with AlgoParams.coinSymbol if set there (cannot be overridden) */
-    coinSymbol: string;
-    /** Scales AlgoParams.startingCapitalUSD (and positionSize if type=ABS). Defaults to 1 */
-    capitalScaler: number;
-    /** Unix timestamp (seconds) - required if isBacktest=true */
-    startTime?: number;
-    /** Unix timestamp (seconds) - required if isBacktest=true or closePositionOnExit=true */
-    endTime?: number;
-    /** Auto-stop after reaching certain number of trades */
-    tradesLimit?: number;
-    /** Force close when algo stops (RUNNING -> DONE transition) */
-    closePositionOnExit: boolean;
-    /** Unix timestamp (seconds) of when the run was submitted */
-    launchTime: number;
-    /** Algo/Backtesting services are responsible for progressing the status */
-    status: RunStatus;
-    /** Exchange identifier (Hyperliquid, KuCoin, etc.) */
-    exchangeID: string;
+    isBacktest: boolean;     /** Whether this is a live trading algo or a backtest simulation */
+    coinSymbol: string;     /** Autofilled with AlgoParams.coinSymbol if set there (cannot be overridden) */
+    capitalScaler: number;     /** Scales AlgoParams.startingCapitalUSD (and positionSize if type=ABS). Defaults to 1 */
+    startTime?: number;     /** Unix timestamp (seconds) - required if isBacktest=true */
+    endTime?: number;     /** Unix timestamp (seconds) - required if isBacktest=true or closePositionOnExit=true */
+    tradesLimit?: number;     /** Auto-stop after reaching certain number of trades */
+    closePositionOnExit: boolean;     /** Force close when algo stops (RUNNING -> DONE transition) */
+    launchTime: number;     /** Unix timestamp (seconds) of when the run was submitted */
+    status: RunStatus;     /** Algo/Backtesting services are responsible for progressing the status */
+    exchangeID: string;     /** Exchange identifier (Hyperliquid, KuCoin, etc.) */
+
 }
-
-// =============================================================================
-// RE-EXPORT OUTPUT TYPES
-// =============================================================================
-
-export type { EquityPoint } from "../output/types.ts";

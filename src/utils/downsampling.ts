@@ -5,7 +5,7 @@
  * Preserves important features like peaks and valleys.
  */
 
-import type { EquityPoint } from "../core/types.ts";
+import type { EquityPoint } from "../output/types.ts";
 
 // =============================================================================
 // BASIC DOWNSAMPLING

@@ -1,39 +1,15 @@
-/**
- * Backtester-v2 Entry Point
- *
- * Event-based backtest API with full algo analytics.
- */
-
 import type { Candle } from "./core/types.ts";
 import type { BacktestOutput } from "./output/types.ts";
 import { BacktestInputSchema, type BacktestInput } from "./core/config.ts";
 import { runBacktestPipeline } from "./simulation/stages/index.ts";
 
-// =============================================================================
 // MAIN BACKTEST FUNCTION
-// =============================================================================
-
-/**
- * Run a complete backtest with full event logging.
- * Returns BacktestOutput format with algo analytics.
- *
- * Uses the modern AlgoRunner pipeline with dependency injection,
- * ensuring consistent behavior between backtest and live trading.
- *
- * @param candles - Historical price data (1m candles)
- * @param input - Backtest input (algoConfig + runSettings)
- * @returns Complete backtest output with events and metrics
- */
 export async function runBacktestWithEvents(candles: Candle[], input: BacktestInput): Promise<BacktestOutput> {
     const validatedInput = BacktestInputSchema.parse(input);
     return runBacktestPipeline(candles, validatedInput);
 }
 
-// =============================================================================
-// EXPORTS
-// =============================================================================
-
-// Core types
+// EXPORTS core types
 export type {
     Candle,
     AlgoParams,

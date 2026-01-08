@@ -1,14 +1,3 @@
-/**
- * Configuration Module
- *
- * Central export point for configuration management.
- * Provides validation capabilities.
- */
-
-// =============================================================================
-// TYPES
-// =============================================================================
-
 export type {
     AlgoParams,
     AlgoConfig,
@@ -17,10 +6,6 @@ export type {
     CreateAlgoConfigInput,
     CreateRunSettingsInput,
 } from "./types.ts";
-
-// =============================================================================
-// VALIDATION
-// =============================================================================
 
 export { validateAlgoParams, validateAlgoConfig, validateRunSettings, validateBacktestSetup } from "./validation.ts";
 
