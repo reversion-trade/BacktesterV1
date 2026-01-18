@@ -10,13 +10,15 @@ import { describe, it, expect } from "bun:test";
 import {
     executeInitialization,
     buildIndicatorInfoMap,
+    type InitializationResult,
+    type InitializationInput,
+} from "../initialization.ts";
+import {
     getIndicatorKeys,
     getIndicatorsForCondition,
     getRequiredIndicatorCount,
     validateInitializationResult,
-    type InitializationResult,
-    type InitializationInput,
-} from "../initialization.ts";
+} from "./test-utils.ts";
 import type { AlgoParams, Candle } from "../../../core/types.ts";
 import type { IndicatorInfo, ConditionType } from "../../../events/index.ts";
 import { EventCollector } from "../../../events/index.ts";
@@ -84,6 +86,8 @@ function createMockDataLoadingResult(overrides: Partial<DataLoadingResult> = {})
         actualEndTime: 1120,
         initialCapital: 10000,
         isEmpty: false,
+        tradingStartIndex: 0,
+        actualPreWarmingSeconds: 0,
         ...overrides,
     };
 }

@@ -122,7 +122,7 @@ export function executeOutputGeneration(input: OutputGenerationInput): BacktestO
         },
         trades: simulationResult.trades,
         equityCurve: simulationResult.equityCurve.map((p) => ({
-            timestamp: p.timestamp,
+            timestamp: p.timestamp ?? p.time,
             equity: p.equity,
             drawdownPct: p.drawdownPct,
         })),
@@ -151,7 +151,7 @@ export function calculateMetrics(
 ): CalculatedMetrics {
     // Convert equity curve to format expected by swap metrics
     const equityCurveForMetrics = equityCurve.map((p) => ({
-        timestamp: p.timestamp,
+        timestamp: p.timestamp ?? p.time,
         equity: p.equity,
         drawdownPct: p.drawdownPct,
     }));
@@ -280,105 +280,3 @@ export function createEmptyAlgoMetrics(): AlgoMetrics {
     };
 }
 
-// =============================================================================
-// VALIDATION
-// =============================================================================
-
-/**
- * Validate backtest output for completeness.
- *
- * @param output - BacktestOutput to validate
- * @returns Validation report
- */
-export function validateBacktestOutput(output: BacktestOutput): {
-    isValid: boolean;
-    issues: string[];
-    summary: {
-        totalTrades: number;
-        totalPnlUSD: number;
-        winRate: number;
-        maxDrawdownPct: number;
-        durationMs: number;
-    };
-} {
-    const issues: string[] = [];
-
-    // Check config completeness
-    if (!output.config.algoId) {
-        issues.push("Missing algoId in config");
-    }
-    if (!output.config.symbol) {
-        issues.push("Missing symbol in config");
-    }
-
-    // Check metrics consistency
-    if (output.trades.length !== output.swapMetrics.totalTrades) {
-        const actual = output.trades.length;
-        const expected = output.swapMetrics.totalTrades;
-        issues.push(`Trade count mismatch: ${actual} trades but swapMetrics.totalTrades = ${expected}`);
-    }
-
-    // Check equity curve
-    if (output.trades.length > 0 && output.equityCurve.length === 0) {
-        issues.push("Trades exist but equity curve is empty");
-    }
-
-    // Check timestamps
-    if (output.config.startTime > output.config.endTime) {
-        issues.push("startTime > endTime");
-    }
-
-    return {
-        isValid: issues.length === 0,
-        issues,
-        summary: {
-            totalTrades: output.swapMetrics.totalTrades,
-            totalPnlUSD: output.swapMetrics.totalPnlUSD,
-            winRate: output.swapMetrics.winRate,
-            maxDrawdownPct: output.swapMetrics.maxDrawdownPct,
-            durationMs: output.durationMs,
-        },
-    };
-}
-
-// =============================================================================
-// DEBUG UTILITIES
-// =============================================================================
-
-/**
- * Format backtest output summary for debugging.
- *
- * @param output - BacktestOutput to format
- * @returns Formatted summary string
- */
-export function formatOutputSummary(output: BacktestOutput): string {
-    const { swapMetrics, algoMetrics, config } = output;
-
-    const startDate = new Date(config.startTime * 1000).toISOString();
-    const endDate = new Date(config.endTime * 1000).toISOString();
-
-    return [
-        "=== Backtest Output Summary ===",
-        `Symbol: ${config.symbol}`,
-        `Period: ${startDate} to ${endDate}`,
-        `Starting Capital: $${config.startingCapitalUSD.toFixed(2)}`,
-        "",
-        "=== Performance ===",
-        `Total Trades: ${swapMetrics.totalTrades}`,
-        `Win Rate: ${(swapMetrics.winRate * 100).toFixed(1)}%`,
-        `Total P&L: $${swapMetrics.totalPnlUSD.toFixed(2)}`,
-        `Max Drawdown: ${(swapMetrics.maxDrawdownPct * 100).toFixed(2)}%`,
-        `Sharpe Ratio: ${swapMetrics.sharpeRatio.toFixed(2)}`,
-        `Profit Factor: ${swapMetrics.profitFactor.toFixed(2)}`,
-        "",
-        "=== Algo Metrics ===",
-        `Indicator Flips: ${algoMetrics.eventCounts.indicatorFlips}`,
-        `State Transitions: ${algoMetrics.eventCounts.stateTransitions}`,
-        `Time Flat: ${(algoMetrics.stateDistribution.pctTimeFlat * 100).toFixed(1)}%`,
-        `Time Long: ${(algoMetrics.stateDistribution.pctTimeLong * 100).toFixed(1)}%`,
-        `Time Short: ${(algoMetrics.stateDistribution.pctTimeShort * 100).toFixed(1)}%`,
-        "",
-        `Duration: ${output.durationMs}ms`,
-        `Bars Processed: ${output.totalBarsProcessed}`,
-    ].join("\n");
-}

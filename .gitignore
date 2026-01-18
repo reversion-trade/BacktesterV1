@@ -7,3 +7,5 @@ dist/
 .env
 .env.*
 bun.lockb
+scripts/
+AUDIT.md

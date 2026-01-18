@@ -28,9 +28,10 @@
  */
 
 import type { Candle, AlgoParams, IndicatorConfig } from "../../core/types.ts";
-import type { SignalCache, CalculationResult } from "../../indicators/calculator.ts";
-import { calculateIndicators, collectIndicatorConfigs } from "../../indicators/calculator.ts";
+import type { SignalCache } from "../../indicators/calculator.ts";
+import { calculateIndicators, calculateIndicatorsWithMipMap, collectIndicatorConfigs } from "../../indicators/calculator.ts";
 import type { DataLoadingResult } from "./data-loading.ts";
+import type { MipMapBuildingResult } from "./mipmap-building.ts";
 
 // =============================================================================
 // TYPES
@@ -65,6 +66,18 @@ export interface IndicatorCalculationResult {
 export interface IndicatorCalculationInput {
     /** Candles to calculate indicators over */
     candles: Candle[];
+
+    /** Algorithm parameters containing indicator configs */
+    algoParams: AlgoParams;
+}
+
+/**
+ * Input for Stage 2 with MIP-Map.
+ * Uses pre-built MIP-map for multi-resolution indicator calculation.
+ */
+export interface IndicatorCalculationWithMipMapInput {
+    /** MIP-map result from Stage 1.1 */
+    mipMapResult: MipMapBuildingResult;
 
     /** Algorithm parameters containing indicator configs */
     algoParams: AlgoParams;
@@ -119,6 +132,57 @@ export function executeIndicatorCalculation(input: IndicatorCalculationInput): I
 }
 
 /**
+ * Execute Stage 2 with MIP-Map: Pre-calculate all indicator signals using
+ * multi-resolution candle data.
+ *
+ * This is the MIP-map aware version of executeIndicatorCalculation().
+ * Instead of using raw candles, it uses pre-aggregated candles at each
+ * indicator's native resolution for correct multi-timeframe calculation.
+ *
+ * @param input - MIP-map indicator calculation input
+ * @returns IndicatorCalculationResult with signal cache and metadata
+ *
+ * @example
+ * ```typescript
+ * // From Stage 1.1 result:
+ * const indicatorResult = executeIndicatorCalculationWithMipMap({
+ *     mipMapResult,
+ *     algoParams: dataResult.validatedInput.algoConfig.params,
+ * });
+ * ```
+ *
+ * @audit-note
+ * This function uses calculateIndicatorsWithMipMap() which retrieves
+ * candles at the correct resolution for each indicator before calculation.
+ */
+export function executeIndicatorCalculationWithMipMap(
+    input: IndicatorCalculationWithMipMapInput
+): IndicatorCalculationResult {
+    const { mipMapResult, algoParams } = input;
+
+    // Step 1: Extract all indicator configs from algo parameters
+    const indicatorConfigs = collectIndicatorConfigs(algoParams);
+
+    // Step 2: Calculate all indicators using MIP-map (correct multi-resolution)
+    const { signals: signalCache, warmupCandles } = calculateIndicatorsWithMipMap(
+        mipMapResult.mipMap,
+        indicatorConfigs
+    );
+
+    // Step 3: Gather metadata for auditing
+    const indicatorKeys = signalCache.keys();
+    const uniqueIndicatorCount = indicatorKeys.length;
+
+    return {
+        signalCache,
+        warmupCandles,
+        indicatorConfigs,
+        uniqueIndicatorCount,
+        indicatorKeys,
+    };
+}
+
+/**
  * Create IndicatorCalculationInput from DataLoadingResult.
  *
  * Convenience function for stage chaining.
@@ -133,76 +197,3 @@ export function createIndicatorInputFromDataResult(dataResult: DataLoadingResult
     };
 }
 
-// =============================================================================
-// VALIDATION UTILITIES
-// =============================================================================
-
-/**
- * Validate indicator calculation result.
- *
- * Used for debugging and ensuring calculation integrity.
- *
- * @param result - Indicator calculation result to validate
- * @returns Validation report
- */
-export function validateIndicatorResult(result: IndicatorCalculationResult): {
-    isValid: boolean;
-    issues: string[];
-    summary: {
-        configCount: number;
-        uniqueCount: number;
-        warmupCandles: number;
-        duplicatesRemoved: number;
-    };
-} {
-    const issues: string[] = [];
-
-    // Check for empty results
-    if (result.indicatorConfigs.length === 0) {
-        issues.push("No indicator configurations found");
-    }
-
-    // Check signal cache consistency
-    for (const key of result.indicatorKeys) {
-        const signals = result.signalCache.get(key);
-        if (!signals) {
-            issues.push(`Missing signals for key: ${key}`);
-        } else if (signals.length === 0) {
-            issues.push(`Empty signal array for key: ${key}`);
-        }
-    }
-
-    // Check warmup is reasonable
-    if (result.warmupCandles < 0) {
-        issues.push(`Invalid warmup candles: ${result.warmupCandles}`);
-    }
-
-    return {
-        isValid: issues.length === 0,
-        issues,
-        summary: {
-            configCount: result.indicatorConfigs.length,
-            uniqueCount: result.uniqueIndicatorCount,
-            warmupCandles: result.warmupCandles,
-            duplicatesRemoved: result.indicatorConfigs.length - result.uniqueIndicatorCount,
-        },
-    };
-}
-
-/**
- * Get indicator signal at a specific candle index.
- *
- * Utility for debugging and verification.
- *
- * @param signalCache - The signal cache
- * @param key - Indicator cache key
- * @param barIndex - Candle index
- * @returns Signal value or undefined if not found
- */
-export function getSignalAtBar(signalCache: SignalCache, key: string, barIndex: number): boolean | undefined {
-    const signals = signalCache.get(key);
-    if (!signals || barIndex < 0 || barIndex >= signals.length) {
-        return undefined;
-    }
-    return signals[barIndex];
-}

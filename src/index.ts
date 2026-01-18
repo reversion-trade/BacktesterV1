@@ -1,11 +1,11 @@
 import type { Candle } from "./core/types.ts";
 import type { BacktestOutput } from "./output/types.ts";
-import { BacktestInputSchema, type BacktestInput } from "./core/config.ts";
+import { validateBacktestInput, type BacktestInput } from "./core/config.ts";
 import { runBacktestPipeline } from "./simulation/stages/index.ts";
 
 // MAIN BACKTEST FUNCTION
 export async function runBacktestWithEvents(candles: Candle[], input: BacktestInput): Promise<BacktestOutput> {
-    const validatedInput = BacktestInputSchema.parse(input);
+    const validatedInput = validateBacktestInput(input);
     return runBacktestPipeline(candles, validatedInput);
 }
 
@@ -18,7 +18,6 @@ export type {
     Direction,
     ValueConfig,
     ValueType,
-    LadderParams,
     OrderType,
     RunStatus,
     EntryCondition,
@@ -51,6 +50,7 @@ export type {
 // Config types and schemas
 export type { BacktestInput } from "./core/config.ts";
 export {
+    validateBacktestInput,
     BacktestInputSchema,
     AlgoParamsSchema,
     AlgoConfigSchema,
@@ -65,12 +65,8 @@ export { EventCollector, type IndicatorInfo } from "./events/collector.ts";
 export { calculateSwapMetrics } from "./output/swap-metrics.ts";
 export { calculateAlgoMetrics } from "./output/algo-metrics.ts";
 
-// Simulation components
-export { TradingStateMachine, createStateMachine } from "./simulation/state-machine.ts";
-
-// Modern DI-based simulation
+// Event-driven simulation pipeline
 export { runBacktestPipeline } from "./simulation/stages/index.ts";
-export { AlgoRunner, runBacktestWithAlgoRunner } from "./simulation/algo-runner.ts";
 
 export {
     StopLossIndicator,

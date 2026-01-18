@@ -39,7 +39,7 @@ export { calculateTargetPrice, isPriceLevelHit } from "./types.ts";
 
 export {
     BaseSpecialIndicator,
-    ValueConfigSchema,
+    RuntimeValueSchema,
     DirectionSchema,
     StopLossConfigSchema,
     TakeProfitConfigSchema,

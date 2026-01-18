@@ -55,6 +55,22 @@ export class TakeProfitIndicator extends BaseSpecialIndicator<TakeProfitConfig, 
      * Calculates the take profit price level based on entry price and config.
      */
     protected onReset(): void {
+        this.recalculatePriceLevel();
+    }
+
+    /**
+     * Called when dynamicFactor is updated mid-position (sub-bar recalculation).
+     * Recalculates the TP level using the new dynamicFactor.
+     */
+    protected override onDynamicFactorUpdate(): void {
+        this.recalculatePriceLevel();
+    }
+
+    /**
+     * Calculate the take profit price level based on current entry price and dynamicFactor.
+     * Called by both onReset() and onDynamicFactorUpdate().
+     */
+    private recalculatePriceLevel(): void {
         const offset = this.calculateOffset(this.config.takeProfit);
 
         // Calculate TP price level

@@ -65,17 +65,17 @@ export function calculateSwapMetrics(
     const sharpeRatio = calculateSharpeRatio(dailyReturns, riskFreeAnnual);
     const sortinoRatio = calculateSortinoRatio(dailyReturns, riskFreeAnnual);
 
-    const maxDrawdownPct = equityCurve.length > 0 ? Math.max(...equityCurve.map((p) => p.drawdownPct)) : 0;
-    const maxDrawdownUSD =
-        equityCurve.length > 0
-            ? Math.max(
-                  ...equityCurve.map((p, i) => {
-                      if (i === 0) return 0;
-                      const peak = Math.max(...equityCurve.slice(0, i + 1).map((e) => e.equity));
-                      return peak - p.equity;
-                  })
-              )
-            : 0;
+    // Use reduce instead of spread to avoid stack overflow on large arrays
+    const maxDrawdownPct = equityCurve.reduce((max, p) => Math.max(max, p.drawdownPct), 0);
+
+    // Calculate maxDrawdownUSD using a single pass O(n) algorithm
+    let maxDrawdownUSD = 0;
+    let peakEquity = 0;
+    for (const point of equityCurve) {
+        peakEquity = Math.max(peakEquity, point.equity);
+        const drawdown = peakEquity - point.equity;
+        maxDrawdownUSD = Math.max(maxDrawdownUSD, drawdown);
+    }
 
     const calmarRatio = trades.length === 0 ? 0 : calculateCalmarRatioFromEquity(equityCurve, maxDrawdownPct);
 

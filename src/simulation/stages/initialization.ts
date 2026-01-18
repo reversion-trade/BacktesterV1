@@ -26,7 +26,8 @@
 import type { AlgoParams, Direction, PositionState, EntryCondition, ExitCondition } from "../../core/types.ts";
 import type { BacktestInput } from "../../core/config.ts";
 import { makeIndicator } from "@indicators/factory.ts";
-import { EventCollector, type IndicatorInfo, type ConditionType } from "../../events/index.ts";
+import { EventCollector, type IndicatorInfo } from "../../events/index.ts";
+import type { ConditionType } from "../../events/types.ts";
 import type { DataLoadingResult } from "./data-loading.ts";
 import type { ResamplingResult } from "./resampling.ts";
 
@@ -204,113 +205,3 @@ export function buildIndicatorInfoMap(algoParams: AlgoParams): Map<string, Indic
     return infoMap;
 }
 
-/**
- * Get all indicator keys from the info map.
- *
- * @param indicatorInfoMap - Map from buildIndicatorInfoMap()
- * @returns Array of indicator cache keys
- */
-export function getIndicatorKeys(indicatorInfoMap: Map<string, IndicatorInfo>): string[] {
-    return Array.from(indicatorInfoMap.keys());
-}
-
-/**
- * Get indicators for a specific condition type.
- *
- * @param indicatorInfoMap - Map from buildIndicatorInfoMap()
- * @param conditionType - Condition type to filter by
- * @returns Array of IndicatorInfo for that condition
- */
-export function getIndicatorsForCondition(
-    indicatorInfoMap: Map<string, IndicatorInfo>,
-    conditionType: ConditionType
-): IndicatorInfo[] {
-    return Array.from(indicatorInfoMap.values()).filter((info) => info.conditionType === conditionType);
-}
-
-/**
- * Get required indicator count for a condition.
- *
- * @param indicatorInfoMap - Map from buildIndicatorInfoMap()
- * @param conditionType - Condition type to check
- * @returns Count of required indicators
- */
-export function getRequiredIndicatorCount(
-    indicatorInfoMap: Map<string, IndicatorInfo>,
-    conditionType: ConditionType
-): number {
-    return getIndicatorsForCondition(indicatorInfoMap, conditionType).filter((info) => info.isRequired).length;
-}
-
-// =============================================================================
-// VALIDATION
-// =============================================================================
-
-/**
- * Validate initialization result.
- *
- * @param result - Initialization result to validate
- * @returns Validation report
- */
-export function validateInitializationResult(result: InitializationResult): {
-    isValid: boolean;
-    issues: string[];
-    summary: {
-        indicatorCount: number;
-        longEntryIndicators: number;
-        longExitIndicators: number;
-        shortEntryIndicators: number;
-        shortExitIndicators: number;
-        initialCapital: number;
-        warmupBars: number;
-    };
-} {
-    const issues: string[] = [];
-
-    // Check initial capital
-    if (result.initialCapital <= 0) {
-        issues.push(`Invalid initial capital: ${result.initialCapital}`);
-    }
-
-    // Check warmup
-    if (result.warmupBars < 0) {
-        issues.push(`Invalid warmup bars: ${result.warmupBars}`);
-    }
-
-    // Check fees
-    if (result.feeBps < 0) {
-        issues.push(`Invalid fee bps: ${result.feeBps}`);
-    }
-
-    if (result.slippageBps < 0) {
-        issues.push(`Invalid slippage bps: ${result.slippageBps}`);
-    }
-
-    // Check algo type consistency
-    const { algoParams } = result;
-    if (algoParams.type === "LONG" && !algoParams.longEntry) {
-        issues.push("Algo type is LONG but no longEntry condition defined");
-    }
-    if (algoParams.type === "SHORT" && !algoParams.shortEntry) {
-        issues.push("Algo type is SHORT but no shortEntry condition defined");
-    }
-    if (algoParams.type === "BOTH") {
-        if (!algoParams.longEntry && !algoParams.shortEntry) {
-            issues.push("Algo type is BOTH but no entry conditions defined");
-        }
-    }
-
-    return {
-        isValid: issues.length === 0,
-        issues,
-        summary: {
-            indicatorCount: result.indicatorInfoMap.size,
-            longEntryIndicators: getIndicatorsForCondition(result.indicatorInfoMap, "LONG_ENTRY").length,
-            longExitIndicators: getIndicatorsForCondition(result.indicatorInfoMap, "LONG_EXIT").length,
-            shortEntryIndicators: getIndicatorsForCondition(result.indicatorInfoMap, "SHORT_ENTRY").length,
-            shortExitIndicators: getIndicatorsForCondition(result.indicatorInfoMap, "SHORT_EXIT").length,
-            initialCapital: result.initialCapital,
-            warmupBars: result.warmupBars,
-        },
-    };
-}

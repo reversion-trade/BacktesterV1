@@ -13,10 +13,9 @@ import {
     createEmptyBacktestOutput,
     createEmptySwapMetrics,
     createEmptyAlgoMetrics,
-    validateBacktestOutput,
-    formatOutputSummary,
     type OutputGenerationInput,
 } from "../output.ts";
+import { validateBacktestOutput, formatOutputSummary } from "./test-utils.ts";
 import type { BacktestOutput, TradeEvent, AlgoEvent, SwapEvent } from "../../../events/types.ts";
 import type { BacktestInput } from "../../../core/config.ts";
 import type { SimulationResult, EquityPoint } from "../../../output/types.ts";
@@ -121,10 +120,12 @@ function createMockAlgoEvent(overrides: Partial<AlgoEvent> = {}): AlgoEvent {
 
 function createMockEquityPoint(overrides: Partial<EquityPoint> = {}): EquityPoint {
     return {
+        time: 1000,
         timestamp: 1000,
         barIndex: 0,
         equity: 10000,
         drawdownPct: 0,
+        runupPct: 0,
         ...overrides,
     };
 }
@@ -135,8 +136,6 @@ function createMockSimulationResult(overrides: Partial<SimulationResult> = {}): 
         swapEvents: [],
         algoEvents: [],
         equityCurve: [createMockEquityPoint()],
-        finalEquity: 10000,
-        finalState: "CASH",
         ...overrides,
     };
 }
@@ -175,6 +174,8 @@ function createMockDataLoadingResult(): DataLoadingResult {
         actualEndTime: 1120,
         initialCapital: 10000,
         isEmpty: false,
+        tradingStartIndex: 0,
+        actualPreWarmingSeconds: 0,
     };
 }
 
