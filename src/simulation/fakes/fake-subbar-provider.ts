@@ -1,5 +1,4 @@
-// Fake Sub-Bar Provider - Mock implementation for testing
-// Generates synthetic sub-bar candles from parent candles or uses pre-loaded data
+/** Fake Sub-Bar Provider - Mock implementation for testing. Generates synthetic sub-bars or uses pre-loaded data. */
 
 import type { Candle } from "../../core/types.ts";
 import type { ISubBarDataProvider } from "../../interfaces/subbar-data-provider.ts";
@@ -9,99 +8,37 @@ export class FakeSubBarProvider implements ISubBarDataProvider {
     private preloadedData: Map<number, Candle[]> = new Map();  // parentTimestamp → sub-bar candles
     private parentCandles: Map<number, Candle> = new Map();    // timestamp → parent candle (for generation)
 
-    constructor() {}
+    preloadSubBars(parentTimestamp: number, subBars: Candle[]): void { this.preloadedData.set(parentTimestamp, subBars); } // Set up deterministic test scenarios
+    preloadParentCandles(candles: Candle[]): void { for (const candle of candles) this.parentCandles.set(candle.bucket, candle); } // For automatic sub-bar generation
+    clear(): void { this.preloadedData.clear(); this.parentCandles.clear(); }
 
-    // PRELOAD DATA (for tests with specific scenarios)
+    getSubBarCandles(_symbol: string, parentBarTimestamp: number, parentTimeframe: string): Candle[] {
+        const preloaded = this.preloadedData.get(parentBarTimestamp); // Check preloaded data first
+        if (preloaded) return preloaded;
 
-    /**
-     * Preload sub-bar candles for specific parent bars.
-     * Use this to set up deterministic test scenarios.
-     */
-    preloadSubBars(parentTimestamp: number, subBars: Candle[]): void {
-        this.preloadedData.set(parentTimestamp, subBars);
+        const parentCandle = this.parentCandles.get(parentBarTimestamp); // Generate synthetic sub-bars from parent
+        if (parentCandle) return this.generateSubBars(parentCandle, parentTimeframe);
+
+        return []; // No data available
     }
 
-    /**
-     * Preload parent candles for automatic sub-bar generation.
-     */
-    preloadParentCandles(candles: Candle[]): void {
-        for (const candle of candles) {
-            this.parentCandles.set(candle.bucket, candle);
-        }
-    }
-
-    /**
-     * Clear all preloaded data.
-     */
-    clear(): void {
-        this.preloadedData.clear();
-        this.parentCandles.clear();
-    }
-
-    // ISubBarDataProvider IMPLEMENTATION
-
-    getSubBarCandles(
-        _symbol: string,
-        parentBarTimestamp: number,
-        parentTimeframe: string
-    ): Candle[] {
-        // Check for preloaded data first
-        const preloaded = this.preloadedData.get(parentBarTimestamp);
-        if (preloaded) {
-            return preloaded;
-        }
-
-        // Generate synthetic sub-bars from parent candle
-        const parentCandle = this.parentCandles.get(parentBarTimestamp);
-        if (parentCandle) {
-            return this.generateSubBars(parentCandle, parentTimeframe);
-        }
-
-        // No data available - return empty array
-        return [];
-    }
-
-    getSubBarCandlesBatch(
-        symbol: string,
-        parentBarTimestamps: number[],
-        parentTimeframe: string
-    ): Map<number, Candle[]> {
+    getSubBarCandlesBatch(symbol: string, parentBarTimestamps: number[], parentTimeframe: string): Map<number, Candle[]> {
         const result = new Map<number, Candle[]>();
-
-        for (const timestamp of parentBarTimestamps) {
-            const subBars = this.getSubBarCandles(symbol, timestamp, parentTimeframe);
-            result.set(timestamp, subBars);
-        }
-
+        for (const timestamp of parentBarTimestamps) result.set(timestamp, this.getSubBarCandles(symbol, timestamp, parentTimeframe));
         return result;
     }
 
-    getSubBarTimeframe(parentTimeframe: string): string | null {
-        return SUBBAR_TIMEFRAME_MAP[parentTimeframe] ?? null;
-    }
+    getSubBarTimeframe(parentTimeframe: string): string | null { return SUBBAR_TIMEFRAME_MAP[parentTimeframe] ?? null; }
+    getSubBarCount(parentTimeframe: string): number { return SUBBAR_COUNT_MAP[parentTimeframe] ?? 0; }
 
-    getSubBarCount(parentTimeframe: string): number {
-        return SUBBAR_COUNT_MAP[parentTimeframe] ?? 0;
-    }
-
-    // SYNTHETIC GENERATION
-
-    /**
-     * Generate synthetic sub-bar candles from a parent candle.
-     * Creates a realistic-looking path from open to close through high/low.
-     */
-    private generateSubBars(parentCandle: Candle, parentTimeframe: string): Candle[] {
+    private generateSubBars(parentCandle: Candle, parentTimeframe: string): Candle[] { // Generate synthetic sub-bars with realistic path
         const subBarCount = this.getSubBarCount(parentTimeframe);
         if (subBarCount === 0) return [];
 
         const { open, high, low, close, bucket } = parentCandle;
         const subBarDuration = this.getSubBarDuration(parentTimeframe);
         const subBars: Candle[] = [];
-
-        // Determine if we hit high first or low first (based on close vs open)
-        const bullish = close >= open;
-
-        // Generate a realistic price path
+        const bullish = close >= open; // Determines if we hit high first or low first
         const pricePath = this.generatePricePath(open, high, low, close, subBarCount, bullish);
 
         for (let i = 0; i < subBarCount; i++) {
@@ -118,67 +55,31 @@ export class FakeSubBarProvider implements ISubBarDataProvider {
                 bucket: bucket + (i * subBarDuration),
             } as Candle);
         }
-
         return subBars;
     }
 
-    /**
-     * Generate a price path through the candle.
-     * Returns subBarCount + 1 prices (one for each sub-bar open + final close).
-     */
-    private generatePricePath(
-        open: number,
-        high: number,
-        low: number,
-        close: number,
-        subBarCount: number,
-        bullish: boolean
-    ): number[] {
-        const path: number[] = [open];
-
-        // Simple linear interpolation with some noise
-        // For bullish: open → high → close
-        // For bearish: open → low → close
-
+    private generatePricePath(open: number, high: number, low: number, close: number, subBarCount: number, bullish: boolean): number[] {
+        const path: number[] = [open]; // Returns subBarCount + 1 prices (one for each sub-bar open + final close)
         const midPoint = Math.floor(subBarCount / 2);
 
         for (let i = 1; i <= subBarCount; i++) {
             let price: number;
-
-            if (i <= midPoint) {
-                // First half: move toward extreme
+            if (i <= midPoint) { // First half: move toward extreme (high for bullish, low for bearish)
                 const extreme = bullish ? high : low;
-                const progress = i / midPoint;
-                price = open + (extreme - open) * progress;
-            } else {
-                // Second half: move toward close
+                price = open + (extreme - open) * (i / midPoint);
+            } else { // Second half: move toward close
                 const extreme = bullish ? high : low;
-                const progress = (i - midPoint) / (subBarCount - midPoint);
-                price = extreme + (close - extreme) * progress;
+                price = extreme + (close - extreme) * ((i - midPoint) / (subBarCount - midPoint));
             }
-
-            // Add small random noise (0.1% of price)
-            price += (Math.random() - 0.5) * price * 0.001;
+            price += (Math.random() - 0.5) * price * 0.001; // Add small random noise (0.1% of price)
             path.push(price);
         }
-
-        // Ensure final price is exactly close
-        path[path.length - 1] = close;
-
+        path[path.length - 1] = close; // Ensure final price is exactly close
         return path;
     }
 
-    /**
-     * Get sub-bar duration in seconds.
-     */
-    private getSubBarDuration(parentTimeframe: string): number {
-        const durationMap: Record<string, number> = {
-            "5m": 60,      // 1m sub-bars
-            "15m": 300,    // 5m sub-bars
-            "1h": 900,     // 15m sub-bars
-            "4h": 3600,    // 1h sub-bars
-            "1d": 14400,   // 4h sub-bars
-        };
+    private getSubBarDuration(parentTimeframe: string): number { // Sub-bar duration in seconds
+        const durationMap: Record<string, number> = { "5m": 60, "15m": 300, "1h": 900, "4h": 3600, "1d": 14400 };
         return durationMap[parentTimeframe] ?? 60;
     }
 }
