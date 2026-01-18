@@ -11,7 +11,7 @@ export const RuntimeValueSchema = z.object({
 
 export const DirectionSchema = z.enum(["LONG", "SHORT"]);
 
-export const StopLossConfigSchema = z.object({ direction: DirectionSchema, stopLoss: RuntimeValueSchema });
+export const StopLossConfigSchema = z.object({ direction: DirectionSchema, stopLoss: RuntimeValueSchema, trailing: z.boolean().optional() });
 export const TakeProfitConfigSchema = z.object({ direction: DirectionSchema, takeProfit: RuntimeValueSchema });
 export const TrailingStopConfigSchema = z.object({ direction: DirectionSchema, trailingOffset: RuntimeValueSchema });
 export const BalanceConfigSchema = z.object({

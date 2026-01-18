@@ -1,27 +1,4 @@
-/**
- * Stage 4: Algo State Initialization
- *
- * @module simulation/stages/initialization
- * @description
- * Fourth stage in the backtester pipeline. Responsible for:
- * - Initializing the EventCollector with indicator metadata
- * - Setting up initial algo state (FLAT or in-position)
- * - Preparing special indicator factories
- * - Creating the initial simulation context
- *
- * @architecture
- * This stage bridges the pre-computation phases (Stages 1-3) with
- * the simulation loop (Stage 5). It ensures all state is properly
- * initialized before the forward pass begins.
- *
- * Input: DataLoadingResult + ResamplingResult
- * Output: InitializationResult with ready-to-use simulation state
- *
- * @audit-trail
- * - Created: 2026-01-01 (Sprint 2: Modularize Architecture)
- * - Purpose: Extract initialization logic from runSimulation()
- * - Follows architecture principle: "Stages should be separate and explicit"
- */
+/** Stage 4: Algo State Initialization - Initializes EventCollector, indicator metadata, and simulation context. */
 
 import type { AlgoParams, Direction, PositionState, EntryCondition, ExitCondition } from "../../core/types.ts";
 import type { BacktestInput } from "../../core/config.ts";
@@ -31,114 +8,42 @@ import type { ConditionType } from "../../events/types.ts";
 import type { DataLoadingResult } from "./data-loading.ts";
 import type { ResamplingResult } from "./resampling.ts";
 
-// =============================================================================
-// TYPES
-// =============================================================================
-
-/**
- * Result of Stage 4: Algo State Initialization
- *
- * Contains initialized state ready for simulation loop.
- */
 export interface InitializationResult {
-    /** Initialized EventCollector with registered indicators */
-    collector: EventCollector;
-
-    /** Map of indicator keys to their metadata */
-    indicatorInfoMap: Map<string, IndicatorInfo>;
-
-    /** Initial position state */
-    initialState: PositionState;
-
-    /** Initial capital in USD */
-    initialCapital: number;
-
-    /** Whether to close position at end of backtest */
-    closePositionOnExit: boolean;
-
-    /** Maximum number of trades (optional) */
-    tradesLimit?: number;
-
-    /** Fee in basis points */
-    feeBps: number;
-
-    /** Slippage in basis points */
-    slippageBps: number;
-
-    /** Asset symbol being traded */
-    symbol: string;
-
-    /** Number of warmup bars to skip */
-    warmupBars: number;
-
-    /** Algo parameters for the simulation */
-    algoParams: AlgoParams;
+    collector: EventCollector;                                                    // EventCollector with registered indicators
+    indicatorInfoMap: Map<string, IndicatorInfo>;                                 // Indicator keys → metadata
+    initialState: PositionState;                                                  // Initial position state (always CASH)
+    initialCapital: number;                                                       // Starting capital in USD
+    closePositionOnExit: boolean;                                                 // Whether to close position at backtest end
+    tradesLimit?: number;                                                         // Max trades allowed (optional)
+    feeBps: number;                                                               // Fee in basis points
+    slippageBps: number;                                                          // Slippage in basis points
+    symbol: string;                                                               // Asset symbol being traded
+    warmupBars: number;                                                           // Number of warmup bars to skip
+    algoParams: AlgoParams;                                                       // Algo parameters for simulation
 }
 
-/**
- * Input for Stage 4.
- */
 export interface InitializationInput {
-    /** Result from Stage 1 */
-    dataResult: DataLoadingResult;
-
-    /** Result from Stage 3 (for warmup info) */
-    resamplingResult: ResamplingResult;
+    dataResult: DataLoadingResult;                                                // Result from Stage 1
+    resamplingResult: ResamplingResult;                                           // Result from Stage 3 (for warmup info)
 }
 
-// =============================================================================
-// STAGE 4: INITIALIZATION
-// =============================================================================
-
-/**
- * Execute Stage 4: Initialize algo state for simulation.
- *
- * @param input - Initialization input (data result + resampling result)
- * @returns InitializationResult with ready simulation state
- *
- * @example
- * ```typescript
- * const initResult = executeInitialization({
- *   dataResult,
- *   resamplingResult,
- * });
- *
- * // Now ready for Stage 5 (simulation loop)
- * const collector = initResult.collector;
- * const initialState = initResult.initialState;
- * ```
- *
- * @audit-note
- * The EventCollector is created here with full indicator registration.
- * This ensures consistent event tracking throughout the simulation.
- */
+/** Execute Stage 4: Initialize algo state for simulation. */
 export function executeInitialization(input: InitializationInput): InitializationResult {
     const { dataResult, resamplingResult } = input;
     const { validatedInput, initialCapital } = dataResult;
     const { algoConfig, runSettings, feeBps, slippageBps } = validatedInput;
 
-    // Step 1: Build indicator info map from algo parameters
-    const indicatorInfoMap = buildIndicatorInfoMap(algoConfig.params);
-
-    // Step 2: Initialize EventCollector
-    const collector = new EventCollector(runSettings.coinSymbol);
+    const indicatorInfoMap = buildIndicatorInfoMap(algoConfig.params);            // Build indicator info map
+    const collector = new EventCollector(runSettings.coinSymbol);                 // Initialize EventCollector
     collector.registerIndicators(Array.from(indicatorInfoMap.values()));
-
-    // Step 3: Determine initial state
-    // Always start CASH; TIMEOUT state handles re-entry control
-    const initialState: PositionState = "CASH";
-
-    // Step 4: Extract run settings
-    const closePositionOnExit = runSettings.closePositionOnExit ?? true;
-    const tradesLimit = runSettings.tradesLimit;
 
     return {
         collector,
         indicatorInfoMap,
-        initialState,
+        initialState: "CASH",                                                     // Always start CASH; TIMEOUT handles re-entry
         initialCapital,
-        closePositionOnExit,
-        tradesLimit,
+        closePositionOnExit: runSettings.closePositionOnExit ?? true,
+        tradesLimit: runSettings.tradesLimit,
         feeBps,
         slippageBps,
         symbol: runSettings.coinSymbol,
@@ -147,22 +52,7 @@ export function executeInitialization(input: InitializationInput): Initializatio
     };
 }
 
-// =============================================================================
-// HELPER FUNCTIONS
-// =============================================================================
-
-/**
- * Build indicator info map from algo parameters.
- *
- * Maps each indicator's cache key to its metadata (type, condition, required status).
- *
- * @param algoParams - Algorithm parameters
- * @returns Map of indicator key → IndicatorInfo
- *
- * @audit-note
- * This function is extracted from loop.ts buildIndicatorInfoMap() to enable
- * testing and reuse. The logic is identical.
- */
+/** Build indicator info map from algo parameters. Maps each indicator's cache key to its metadata. */
 export function buildIndicatorInfoMap(algoParams: AlgoParams): Map<string, IndicatorInfo> {
     const infoMap = new Map<string, IndicatorInfo>();
 
@@ -172,28 +62,15 @@ export function buildIndicatorInfoMap(algoParams: AlgoParams): Map<string, Indic
         for (const config of condition.required) {
             const indicator = makeIndicator(config);
             const indicatorKey = indicator.getCacheKey();
-            // Use composite key: conditionType + indicatorKey
-            // This allows the same indicator to be used for multiple conditions
-            const mapKey = `${conditionType}:${indicatorKey}`;
-            infoMap.set(mapKey, {
-                indicatorKey,
-                indicatorType: config.type,
-                conditionType,
-                isRequired: true,
-            });
+            const mapKey = `${conditionType}:${indicatorKey}`;                    // Composite key allows same indicator in multiple conditions
+            infoMap.set(mapKey, { indicatorKey, indicatorType: config.type, conditionType, isRequired: true });
         }
 
         for (const config of condition.optional) {
             const indicator = makeIndicator(config);
             const indicatorKey = indicator.getCacheKey();
-            // Use composite key: conditionType + indicatorKey
-            const mapKey = `${conditionType}:${indicatorKey}`;
-            infoMap.set(mapKey, {
-                indicatorKey,
-                indicatorType: config.type,
-                conditionType,
-                isRequired: false,
-            });
+            const mapKey = `${conditionType}:${indicatorKey}`;                    // Composite key allows same indicator in multiple conditions
+            infoMap.set(mapKey, { indicatorKey, indicatorType: config.type, conditionType, isRequired: false });
         }
     };
 
@@ -204,4 +81,3 @@ export function buildIndicatorInfoMap(algoParams: AlgoParams): Map<string, Indic
 
     return infoMap;
 }
-

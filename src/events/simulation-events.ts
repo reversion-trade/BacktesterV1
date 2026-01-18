@@ -7,8 +7,8 @@
 import type { Direction } from "../core/types.ts";
 import type { ConditionType } from "./types.ts";
 
-// SIMULATION STATE
-export type SimState = "CASH" | "LONG" | "SHORT" | "TIMEOUT";
+// SIMULATION STATE (POSITION uses direction context variable instead of separate LONG/SHORT states)
+export type SimState = "CASH" | "POSITION" | "TIMEOUT";
 
 // EVENT TYPES
 export type SimulationEventType = "SIGNAL_CROSSING" | "CONDITION_MET" | "CONDITION_UNMET" | "SL_TRIGGER" | "TP_TRIGGER" | "TRAILING_TRIGGER" | "TIMEOUT_EXPIRED";

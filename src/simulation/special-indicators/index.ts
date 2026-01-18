@@ -1,12 +1,12 @@
 /** Special Indicators - Stateful per-trade indicators for SL/TP/Trailing/Balance tracking. */
 
-export type { SpecialIndicator, BalanceResult, IntraTradeExtremes, TriggerInfo, PriceLevelResult, TrailingStopResult } from "./types.ts";
+export type { BalanceResult, IntraTradeExtremes, PriceLevelResult, StopLossResult, TrailingStopResult } from "./types.ts";
 export { calculateTargetPrice, isPriceLevelHit } from "./types.ts";
 
 export { BaseSpecialIndicator, RuntimeValueSchema, DirectionSchema, StopLossConfigSchema, TakeProfitConfigSchema, TrailingStopConfigSchema, BalanceConfigSchema, SPECIAL_INDICATOR_TAGS } from "./base.ts";
 export type { BaseSpecialIndicatorConfig, SpecialIndicatorMetadata, SpecialIndicatorTag, StopLossConfigInput, TakeProfitConfigInput, TrailingStopConfigInput, BalanceConfigInput } from "./base.ts";
 
-export { BaseExpandingOperator, ExpandingMaxOperator, ExpandingMinOperator, ExpandingRangeOperator, ExpandingPnLOperator } from "./operators.ts";
+export { BaseExpandingOperator, ExpandingMaxOperator, ExpandingMinOperator, ExpandingRangeOperator } from "./operators.ts";
 
 export { StopLossIndicator, createStopLoss } from "./stop-loss.ts";
 export type { StopLossConfig } from "./stop-loss.ts";

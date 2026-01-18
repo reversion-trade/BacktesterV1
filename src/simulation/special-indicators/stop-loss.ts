@@ -1,149 +1,81 @@
-/**
- * Stop Loss Indicator
- *
- * Fixed stop loss that triggers when price moves against the position
- * by a specified amount (absolute or relative).
- *
- * For LONG: triggers when price <= entry - offset
- * For SHORT: triggers when price >= entry + offset
- */
+/** Stop Loss Indicator - Unified SL supporting both fixed and trailing modes. Fixed: triggers at entry ± offset. Trailing: ratchets with favorable price movement. */
 
 import type { Direction, ValueConfig } from "../../core/types.ts";
 import { BaseSpecialIndicator, StopLossConfigSchema } from "./base.ts";
-import type { PriceLevelResult, StopLossConfig } from "./types.ts";
-import { isPriceLevelHit } from "./types.ts";
+import type { StopLossResult, StopLossConfig } from "./types.ts";
+import { ExpandingMaxOperator, ExpandingMinOperator } from "./operators.ts";
 
 export type { StopLossConfig };
 
-// =============================================================================
-// STOP LOSS INDICATOR
-// =============================================================================
-
-/**
- * Stop loss indicator that monitors price for stop loss hits.
- * Extends BaseSpecialIndicator for shared functionality.
- *
- * @example
- * const sl = new StopLossIndicator({
- *   direction: "LONG",
- *   stopLoss: { type: "REL", value: 0.02 }, // 2% stop loss
- * });
- *
- * sl.reset(50000, 1704067200); // Entry at $50,000
- * // SL level = $49,000 (2% below entry)
- *
- * const results = sl.calculate([49500, 49200, 48900], [t1, t2, t3]);
- * // results = [false, false, true] - triggered at $48,900
- *
- * sl.isTriggered(); // true
- * sl.getTriggerPrice(); // 48900
- */
-export class StopLossIndicator extends BaseSpecialIndicator<StopLossConfig, PriceLevelResult> {
-    // Calculated price level
+export class StopLossIndicator extends BaseSpecialIndicator<StopLossConfig, StopLossResult> {
     private stopLossPrice: number = 0;
+    private extremeOperator: ExpandingMaxOperator | ExpandingMinOperator | null = null; // Only for trailing mode
+    private extremePrice: number = 0;
 
     constructor(config: StopLossConfig) {
         super(config);
-    }
-
-    // ---------------------------------------------------------------------------
-    // Lifecycle
-    // ---------------------------------------------------------------------------
-
-    /**
-     * Reset for a new trade.
-     * Calculates the stop loss price level based on entry price and config.
-     */
-    protected onReset(): void {
-        this.recalculatePriceLevel();
-    }
-
-    /**
-     * Called when dynamicFactor is updated mid-position (sub-bar recalculation).
-     * Recalculates the SL level using the new dynamicFactor.
-     */
-    protected override onDynamicFactorUpdate(): void {
-        this.recalculatePriceLevel();
-    }
-
-    /**
-     * Calculate the stop loss price level based on current entry price and dynamicFactor.
-     * Called by both onReset() and onDynamicFactorUpdate().
-     */
-    private recalculatePriceLevel(): void {
-        const offset = this.calculateOffset(this.config.stopLoss);
-
-        // Calculate SL price level
-        if (this.config.direction === "LONG") {
-            // LONG: SL below entry
-            this.stopLossPrice = this.entryPrice - offset;
-        } else {
-            // SHORT: SL above entry
-            this.stopLossPrice = this.entryPrice + offset;
+        if (config.trailing) {                                                    // Initialize extreme tracker for trailing mode
+            this.extremeOperator = config.direction === "LONG" ? new ExpandingMaxOperator() : new ExpandingMinOperator();
         }
     }
 
-    // ---------------------------------------------------------------------------
-    // Core Logic
-    // ---------------------------------------------------------------------------
+    protected onReset(): void {
+        if (this.config.trailing && this.extremeOperator) {                       // Trailing: initialize extreme with entry price
+            if (this.config.direction === "LONG") {
+                (this.extremeOperator as ExpandingMaxOperator).resetWithValue(this.entryPrice);
+            } else {
+                (this.extremeOperator as ExpandingMinOperator).resetWithValue(this.entryPrice);
+            }
+            this.extremePrice = this.entryPrice;
+        }
+        this.recalculatePriceLevel();
+    }
 
-    /**
-     * Process a batch of prices and check for stop loss hits.
-     * Once triggered, all subsequent prices also return true.
-     */
-    calculate(prices: number[], times: number[]): PriceLevelResult[] {
+    protected override onDynamicFactorUpdate(): void { this.recalculatePriceLevel(); }
+
+    private recalculatePriceLevel(): void {
+        const referencePrice = this.config.trailing ? this.extremePrice : this.entryPrice;
+        const offset = this.config.trailing && this.config.stopLoss.type === "REL"
+            ? referencePrice * this.config.stopLoss.value                         // Trailing REL: % of extreme price
+            : this.calculateOffset(this.config.stopLoss);                         // Fixed: % of entry price
+        this.stopLossPrice = this.config.direction === "LONG"
+            ? referencePrice - offset                                             // LONG: SL below reference
+            : referencePrice + offset;                                            // SHORT: SL above reference
+    }
+
+    calculate(prices: number[], times: number[]): StopLossResult[] {
         return this.withErrorHandling(() => {
-            const results: PriceLevelResult[] = [];
-
+            const results: StopLossResult[] = [];
             for (let i = 0; i < prices.length; i++) {
                 const price = prices[i]!;
                 const time = times[i]!;
 
-                // If already triggered, all subsequent results are true
-                if (this.triggered) {
-                    results.push(true);
+                if (this.triggered) {                                             // Already triggered - return current state
+                    results.push({ hit: true, currentLevel: this.stopLossPrice, extremePrice: this.config.trailing ? this.extremePrice : undefined });
                     continue;
                 }
 
-                // Check if this price hits the stop loss
-                const hit = isPriceLevelHit(
-                    price,
-                    this.stopLossPrice,
-                    this.config.direction,
-                    true // isStopLoss
-                );
-
-                if (hit) {
-                    this.recordTrigger(price, time);
+                if (this.config.trailing && this.extremeOperator) {               // Update extreme and ratchet stop level
+                    this.extremeOperator.feed(price);
+                    this.extremePrice = this.config.direction === "LONG"
+                        ? (this.extremeOperator as ExpandingMaxOperator).getMax()
+                        : (this.extremeOperator as ExpandingMinOperator).getMin();
+                    this.recalculatePriceLevel();                                 // Ratchet stop to new extreme
                 }
 
-                results.push(hit);
+                const hit = this.config.direction === "LONG" ? price <= this.stopLossPrice : price >= this.stopLossPrice;
+                if (hit) this.recordTrigger(price, time);
+                results.push({ hit, currentLevel: this.stopLossPrice, extremePrice: this.config.trailing ? this.extremePrice : undefined });
             }
-
             return results;
         }, "calculate");
     }
 
-    // ---------------------------------------------------------------------------
-    // Accessors
-    // ---------------------------------------------------------------------------
-
-    /**
-     * Get the current stop loss price level.
-     */
-    getStopLossPrice(): number {
-        return this.stopLossPrice;
-    }
+    getStopLossPrice(): number { return this.stopLossPrice; }
+    getExtremePrice(): number { return this.extremePrice; }
+    isTrailing(): boolean { return this.config.trailing ?? false; }
 }
 
-// =============================================================================
-// FACTORY
-// =============================================================================
-
-/**
- * Create a new stop loss indicator with validation.
- */
-export function createStopLoss(direction: Direction, stopLoss: ValueConfig): StopLossIndicator {
-    const config = StopLossConfigSchema.parse({ direction, stopLoss });
-    return new StopLossIndicator(config);
+export function createStopLoss(direction: Direction, stopLoss: ValueConfig, trailing: boolean = false): StopLossIndicator {
+    return new StopLossIndicator(StopLossConfigSchema.parse({ direction, stopLoss, trailing }));
 }

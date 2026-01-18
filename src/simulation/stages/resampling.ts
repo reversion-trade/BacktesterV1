@@ -1,40 +1,4 @@
-/**
- * Stage 3: Signal Resampling
- *
- * @module simulation/stages/resampling
- * @description
- * Third stage in the backtester pipeline. CRITICAL STAGE.
- *
- * This stage is responsible for:
- * - Aligning indicator signals to a common simulation timeframe
- * - Forward-filling signals (sample-and-hold) between updates
- * - Handling multi-resolution indicators (e.g., 5m EMA + 1h RSI)
- *
- * @architecture
- * **CRITICAL:**
- * Resampling and simulation should be separate stages, not combined.
- *
- * This separation ensures:
- * 1. Clear data flow - signals are pre-aligned before simulation
- * 2. Testability - resampling logic can be tested independently
- * 3. Performance - resampling is done once, not per-bar
- * 4. Correctness - forward-fill behavior is explicit and auditable
- *
- * Input: IndicatorCalculationResult (from Stage 2)
- * Output: ResamplingResult with aligned signals for simulation
- *
- * @forward-fill-strategy
- * Signals are forward-filled using sample-and-hold:
- * - When a new signal arrives, it replaces the previous value
- * - Between signal updates, the last known value is maintained
- * - This matches how indicators work in live trading
- *
- * @audit-trail
- * - Created: 2026-01-01 (Sprint 2: Modularize Architecture)
- * - Purpose: Extract resampling from embedded simulation logic
- * - Implements explicit stage separation requirement
- * - Wraps existing resampler.ts functions in stage interface
- */
+/** Stage 3: Signal Resampling - Aligns indicator signals to common simulation timeframe using forward-fill (sample-and-hold). */
 
 import type { Candle, IndicatorConfig } from "../../core/types.ts";
 import type { SignalCache } from "../../indicators/calculator.ts";
@@ -52,198 +16,80 @@ import type { IndicatorCalculationResult } from "./indicator-calculation.ts";
 
 export type { ResampledSignalCache };
 
-// =============================================================================
-// TYPES
-// =============================================================================
-
-/**
- * Result of Stage 3: Signal Resampling
- *
- * Contains signals aligned to simulation timeframe, ready for the simulation loop.
- */
 export interface ResamplingResult {
-    /** Resampled signal cache aligned to simulation resolution */
-    resampledSignals: ResampledSignalCache;
-
-    /** Simulation resolution in seconds */
-    simulationResolution: number;
-
-    /** Timestamps at simulation resolution */
-    simulationTimestamps: number[];
-
-    /** Resolution information for each indicator (for debugging) */
-    indicatorResolutions: IndicatorResolutionInfo[];
-
-    /** Minimum resolution found across all indicators */
-    minIndicatorResolution: number;
-
-    /** Maximum warmup period in simulation bars */
-    warmupBars: number;
-
-    /** Number of simulation bars (after resampling) */
-    totalSimulationBars: number;
-
-    /** Resampling statistics for auditing */
-    resamplingStats: ResamplingStats;
+    resampledSignals: ResampledSignalCache;                                       // Signals aligned to simulation resolution
+    simulationResolution: number;                                                 // Simulation resolution in seconds
+    simulationTimestamps: number[];                                               // Timestamps at simulation resolution
+    indicatorResolutions: IndicatorResolutionInfo[];                              // Resolution info per indicator (for debugging)
+    minIndicatorResolution: number;                                               // Minimum resolution across all indicators
+    warmupBars: number;                                                           // Max warmup period in simulation bars
+    totalSimulationBars: number;                                                  // Number of simulation bars after resampling
+    resamplingStats: ResamplingStats;                                             // Statistics for auditing
 }
 
-/**
- * Statistics about the resampling process for auditing.
- */
 export interface ResamplingStats {
-    /** Number of indicators resampled */
-    indicatorsResampled: number;
-
-    /** Indicators that required upsampling (higher res → sim res) */
-    upsampledCount: number;
-
-    /** Indicators that required downsampling (lower res → sim res) */
-    downsampledCount: number;
-
-    /** Indicators already at simulation resolution */
-    noResampleCount: number;
-
-    /** Total original signal points */
-    originalSignalPoints: number;
-
-    /** Total resampled signal points */
-    resampledSignalPoints: number;
+    indicatorsResampled: number;                                                  // Number of indicators resampled
+    upsampledCount: number;                                                       // Indicators upsampled (higher res → sim res)
+    downsampledCount: number;                                                     // Indicators downsampled (lower res → sim res)
+    noResampleCount: number;                                                      // Indicators already at simulation resolution
+    originalSignalPoints: number;                                                 // Total original signal points
+    resampledSignalPoints: number;                                                // Total resampled signal points
 }
 
-/**
- * Input for Stage 3.
- */
 export interface ResamplingInput {
-    /** Candles (for determining time range) */
-    candles: Candle[];
-
-    /** Signal cache from Stage 2 */
-    signalCache: SignalCache;
-
-    /** Indicator configs (for resolution determination) */
-    indicatorConfigs: IndicatorConfig[];
-
-    /** Warmup candles from Stage 2 */
-    warmupCandles: number;
+    candles: Candle[];                                                            // Candles (for determining time range)
+    signalCache: SignalCache;                                                     // Signal cache from Stage 2
+    indicatorConfigs: IndicatorConfig[];                                          // Indicator configs (for resolution)
+    warmupCandles: number;                                                        // Warmup candles from Stage 2
 }
 
-// =============================================================================
-// STAGE 3: SIGNAL RESAMPLING
-// =============================================================================
-
-/**
- * Execute Stage 3: Resample all signals to simulation timeframe.
- *
- * This is a CRITICAL stage that ensures all indicator signals are
- * aligned to a common timeframe before simulation begins.
- *
- * @param input - Resampling input (candles, signals, configs)
- * @returns ResamplingResult with aligned signals
- *
- * @example
- * ```typescript
- * // From Stage 2 result:
- * const resamplingResult = executeResampling({
- *   candles: dataResult.filteredCandles,
- *   signalCache: indicatorResult.signalCache,
- *   indicatorConfigs: indicatorResult.indicatorConfigs,
- *   warmupCandles: indicatorResult.warmupCandles,
- * });
- *
- * // Signals are now aligned and ready for Stage 5 (simulation)
- * const simBars = resamplingResult.totalSimulationBars;
- * ```
- *
- * @audit-note
- * Forward-fill behavior:
- * - Each signal value persists until a new value arrives
- * - This matches live trading where indicators update at their resolution
- * - Example: 5m EMA updates every 5 minutes, value holds between updates
- */
+/** Execute Stage 3: Resample all signals to simulation timeframe. Forward-fills signals between updates. */
 export function executeResampling(input: ResamplingInput): ResamplingResult {
     const { candles, signalCache, indicatorConfigs, warmupCandles } = input;
 
-    // Handle empty candles - return empty result
-    if (candles.length === 0) {
-        const emptySignals: ResampledSignalCache = {
-            get: () => undefined,
-            has: () => false,
-            keys: () => [],
-            getResolution: () => MIN_SIMULATION_RESOLUTION,
-            getTimestamps: () => [],
-        };
-
+    if (candles.length === 0) {                                                   // Handle empty candles
         return {
-            resampledSignals: emptySignals,
+            resampledSignals: { get: () => undefined, has: () => false, keys: () => [], getResolution: () => MIN_SIMULATION_RESOLUTION, getTimestamps: () => [] },
             simulationResolution: MIN_SIMULATION_RESOLUTION,
             simulationTimestamps: [],
             indicatorResolutions: [],
             minIndicatorResolution: MIN_SIMULATION_RESOLUTION,
             warmupBars: 0,
             totalSimulationBars: 0,
-            resamplingStats: {
-                indicatorsResampled: 0,
-                upsampledCount: 0,
-                downsampledCount: 0,
-                noResampleCount: 0,
-                originalSignalPoints: 0,
-                resampledSignalPoints: 0,
-            },
+            resamplingStats: { indicatorsResampled: 0, upsampledCount: 0, downsampledCount: 0, noResampleCount: 0, originalSignalPoints: 0, resampledSignalPoints: 0 },
         };
     }
 
-    // Step 1: Determine simulation resolution
-    const resolutionResult = determineSimulationResolution(indicatorConfigs);
+    const resolutionResult = determineSimulationResolution(indicatorConfigs);     // Step 1: Determine simulation resolution
     const { simulationResolution, minIndicatorResolution, indicatorResolutions } = resolutionResult;
 
-    // Step 2: Generate simulation timestamps
-    const startTime = candles[0]?.bucket ?? 0;
+    const startTime = candles[0]?.bucket ?? 0;                                    // Step 2: Generate simulation timestamps
     const endTime = candles[candles.length - 1]?.bucket ?? 0;
     const simulationTimestamps = generateTimestamps(startTime, endTime, simulationResolution);
 
-    // Step 3: Resample each indicator's signals
-    const resampledMap = new Map<string, boolean[]>();
-    const stats: ResamplingStats = {
-        indicatorsResampled: 0,
-        upsampledCount: 0,
-        downsampledCount: 0,
-        noResampleCount: 0,
-        originalSignalPoints: 0,
-        resampledSignalPoints: 0,
-    };
+    const resampledMap = new Map<string, boolean[]>();                            // Step 3: Resample each indicator's signals
+    const stats: ResamplingStats = { indicatorsResampled: 0, upsampledCount: 0, downsampledCount: 0, noResampleCount: 0, originalSignalPoints: 0, resampledSignalPoints: 0 };
 
     for (const key of signalCache.keys()) {
         const originalSignals = signalCache.get(key);
         if (!originalSignals) continue;
 
-        // Find resolution for this indicator
         const resInfo = indicatorResolutions.find((r) => r.cacheKey === key);
         const indicatorResolution = resInfo?.resolution ?? MIN_SIMULATION_RESOLUTION;
-
-        // Create timestamps for original signals
         const signalTimestamps = createSignalTimestamps(startTime, originalSignals.length, indicatorResolution);
-
-        // Resample to simulation resolution
         const resampled = resampleSignals(originalSignals, signalTimestamps, simulationTimestamps);
 
         resampledMap.set(key, resampled);
-
-        // Track statistics
         stats.indicatorsResampled++;
         stats.originalSignalPoints += originalSignals.length;
         stats.resampledSignalPoints += resampled.length;
 
-        if (indicatorResolution > simulationResolution) {
-            stats.upsampledCount++;
-        } else if (indicatorResolution < simulationResolution) {
-            stats.downsampledCount++;
-        } else {
-            stats.noResampleCount++;
-        }
+        if (indicatorResolution > simulationResolution) stats.upsampledCount++;
+        else if (indicatorResolution < simulationResolution) stats.downsampledCount++;
+        else stats.noResampleCount++;
     }
 
-    // Step 4: Build resampled cache interface
-    const resampledSignals: ResampledSignalCache = {
+    const resampledSignals: ResampledSignalCache = {                              // Step 4: Build resampled cache interface
         get: (key) => resampledMap.get(key),
         has: (key) => resampledMap.has(key),
         keys: () => Array.from(resampledMap.keys()),
@@ -251,7 +97,6 @@ export function executeResampling(input: ResamplingInput): ResamplingResult {
         getTimestamps: () => simulationTimestamps,
     };
 
-    // Step 5: Calculate warmup in simulation bars
     const warmupBars = Math.ceil((warmupCandles * MIN_SIMULATION_RESOLUTION) / simulationResolution);
 
     return {
@@ -266,21 +111,7 @@ export function executeResampling(input: ResamplingInput): ResamplingResult {
     };
 }
 
-/**
- * Create ResamplingInput from previous stage results.
- *
- * Convenience function for stage chaining.
- *
- * @param candles - Filtered candles from Stage 1
- * @param indicatorResult - Result from Stage 2
- * @returns Input for Stage 3
- */
+/** Create ResamplingInput from previous stage results for stage chaining. */
 export function createResamplingInput(candles: Candle[], indicatorResult: IndicatorCalculationResult): ResamplingInput {
-    return {
-        candles,
-        signalCache: indicatorResult.signalCache,
-        indicatorConfigs: indicatorResult.indicatorConfigs,
-        warmupCandles: indicatorResult.warmupCandles,
-    };
+    return { candles, signalCache: indicatorResult.signalCache, indicatorConfigs: indicatorResult.indicatorConfigs, warmupCandles: indicatorResult.warmupCandles };
 }
-

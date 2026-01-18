@@ -1,0 +1,942 @@
+FEB'S BACKTESTER NOTES
+======================
+
+##1 IndicatorStateSnapshot - Currently Unused
+
+Location: src/interfaces/database.ts
+
+This interface stores a full snapshot of all indicator states at a specific bar:
+- timestamp
+- barIndex
+- indicatorStates: Map<string, boolean> (every indicator's signal)
+- conditionSnapshots: Map<ConditionType, ConditionSnapshot> (every condition's state)
+
+The methods saveIndicatorSnapshot() and getIndicatorSnapshotAtBar() are implemented
+in FakeDatabase but NEVER called anywhere in the codebase.
+
+Current indicator stats use INDICATOR_FLIP events instead (only logs changes, not every bar).
+
+
+## Potential Uses for IndicatorStateSnapshot
+
+1. DEBUGGING TOOL
+   - "Why did my algo enter at bar 57?"
+   - Pull snapshot at bar 57, see exact state of every indicator
+   - Compare with bar 56 to see what changed
+
+2. TRADE ANALYSIS REPORTS
+   - For each trade, show snapshot at entry and exit
+   - "At entry: RSI=28, MACD=true, EMA_cross=true"
+   - "At exit: RSI=72, MACD=false, EMA_cross=true"
+
+3. INDICATOR HEATMAP VISUALIZATION
+   - Save snapshots every N bars (e.g., every 10 bars)
+   - Build visual timeline showing all indicators across the backtest
+   - Color-coded grid: green=true, red=false
+
+4. CONDITION NEAR-MISS ANALYSIS
+   - At each bar, check "how close were we to triggering?"
+   - If LONG_ENTRY needs RSI + MACD + EMA, and we had RSI + MACD but not EMA
+   - Snapshot lets you see these near-misses in detail
+
+5. REPLAY/SCRUBBER FEATURE
+   - Build a UI that lets you "scrub" through the backtest
+   - Slider moves through bars, shows indicator states at each point
+   - Like video playback for your strategy
+
+6. STRATEGY COMPARISON
+   - Run two configs on same data
+   - Compare snapshots at same bars to see divergence
+   - "Config A entered here, Config B didn't - why?"
+
+7. MACHINE LEARNING FEATURES
+   - Export snapshots as training data
+   - Each bar = one row with all indicator states as features
+   - Target = "did we profit if we entered here?"
+
+
+## Implementation Notes
+
+To actually use this, would need to:
+1. Call database.saveIndicatorSnapshot() in algo-runner.ts each bar
+2. Decide: save EVERY bar or just key bars (entries, exits, flips)?
+3. Build retrieval/visualization tools
+
+Saving every bar = more storage but complete picture
+Saving key bars only = less storage but might miss context
+
+
+##2  EventQueryOptions - Ready for Frontend Integration
+
+Location: src/interfaces/database.ts
+
+This is a filter/search interface for querying events:
+- startTime/endTime: Filter by timestamp range
+- startBar/endBar: Filter by bar index range
+- limit: Maximum results to return
+- eventTypes: Filter by event type (e.g., ["ENTRY_SIGNAL", "EXIT_SIGNAL"])
+
+The filtering logic is FULLY IMPLEMENTED in FakeDatabase but currently NEVER USED.
+Right now the codebase just calls getAlgoEvents() and getSwapEvents() with no options
+to grab ALL events at the end of a backtest.
+
+
+## Frontend Integration - Tell the Frontend Dev
+
+The backend filtering is ready to go. Frontend just needs to pass options:
+
+| UI Feature              | API Call                                              |
+|-------------------------|-------------------------------------------------------|
+| "Show last 20 trades"   | getSwapEvents({ limit: 20 })                          |
+| "Filter by trade type"  | getAlgoEvents({ eventTypes: ["ENTRY_SIGNAL"] })       |
+| "Zoom to time range"    | getAlgoEvents({ startTime: X, endTime: Y })           |
+| "Paginate results"      | getSwapEvents({ limit: 50, startBar: lastLoadedBar }) |
+| "Events in bar range"   | getAlgoEvents({ startBar: 100, endBar: 200 })         |
+
+No backend changes needed - just pass the options object when calling the methods.
+Check EventQueryOptions interface in src/interfaces/database.ts for full spec.
+
+
+##3 YURI CALL - MAJOR ARCHITECTURAL CHANGES (2026-01-09)
+
+Summary of proposed changes from call with Yuri. These are significant architectural shifts.
+
+=============================================================================
+CHANGE 1: Event-Based Data Storage (Git Delta Model)
+=============================================================================
+
+CURRENT: Store full state snapshots at every bar
+PROPOSED: Store only events + initial state, reconstruct on demand
+
+How it works:
+- Store initial state (starting capital, positions, etc.)
+- Store delta events (indicator flips, trades, state transitions)
+- Any point-in-time state = initial + replay events up to that time
+
+Benefits:
+- Dramatically reduced storage (like Git storing diffs, not full files)
+- Fast transport to browser (send events, reconstruct client-side)
+- Natural fit for filtering (partition by indicator, event type)
+- Enables scrubber/replay features easily
+
+Implementation:
+- Per-indicator event arrays for efficient filtering
+- Continuous arrays for CPU cache efficiency during reconstruction
+- Browser reconstructs full arrays in memory for plotting
+
+=============================================================================
+CHANGE 2: Synchronous Logging (No Async in Hot Loop)
+=============================================================================
+
+CURRENT: Mixed async/sync throughout simulation
+PROPOSED: Simulation loop is 100% synchronous, async only for I/O
+
+Pattern:
+```typescript
+// Simulation loop - tight, sync, no await
+const memoryLog: Event[] = [];
+while (heap.hasEvents()) {
+  const event = heap.pop();
+  const result = process(event);
+  memoryLog.push(result);  // sync, in-memory only
+}
+
+// After simulation completes - async I/O
+await persistToStorage(memoryLog);
+```
+
+Key insight: async functions should ONLY wrap actual I/O operations.
+Simulations are pure computation - no reason for async.
+
+Benefits:
+- Simpler code (no async pollution)
+- Better performance (no promise overhead)
+- Easier debugging (synchronous call stack)
+
+=============================================================================
+CHANGE 3: Indicator Scaling (DYN) - ALREADY DONE
+=============================================================================
+
+STATUS: Implemented as of 2026-01-09
+
+Dynamic scaling multipliers (DYN type for SL/TP) only allow normalized
+indicators (0-100 output). Library tags are now correct:
+- RSI, StochRSI, MFI, UO, Stochastic = normalized (allowed)
+- ATR = NOT normalized (rejected)
+
+See: src/simulation/valuefactor-calculation.ts
+
+=============================================================================
+CHANGE 4: Event-Driven Simulation Model (Priority Heap)
+=============================================================================
+
+THIS IS THE BIGGEST CHANGE.
+
+CURRENT (step-based):
+```
+for each bar:
+  evaluate all indicators
+  check all conditions
+  maybe transition state
+```
+
+PROPOSED (event-driven):
+```
+heap = [pre-calculated events sorted by timestamp]
+while heap not empty:
+  event = heap.pop()  // O(log n)
+  handle(event)       // may push new events to heap
+```
+
+Event Types:
+- INDICATOR_CROSSING: "RSI crossed above 70 at timestamp X"
+- SL_TRIGGERED: "Price hit stop-loss at timestamp X"
+- TP_TRIGGERED: "Price hit take-profit at timestamp X"
+- TIMEOUT_EXPIRED: "Cooldown period ended at timestamp X"
+- TRADE_ENTRY: "Enter position at timestamp X"
+- TRADE_EXIT: "Exit position at timestamp X"
+
+Key insight: Instead of asking "is RSI > 70?" every bar, pre-calculate
+"RSI crosses 70 at timestamp X" as an event. Only process when something
+actually happens.
+
+Handling "Dead" Events:
+- Trade entry creates SL/TP monitoring events
+- If SL triggers, mark TP event as "dead" (and vice versa)
+- Dead events are skipped when popped from heap (no deletion needed)
+- Heap entry: { timestamp, event, isDead: boolean }
+
+Benefits:
+- ~10x speed improvement (only process when events occur)
+- Natural chronological ordering
+- No redundant checks
+- Eliminates need for resampling during simulation
+
+Resolution Handling:
+- Each indicator calculates at its OWN resolution (not resampled)
+- Like mipmapping in graphics: each level aggregates from finer level
+- After calculation, values are interpolated to simulation resolution
+- Nearest-neighbor interpolation preferred for discrete signals
+
+Questions to Resolve:
+- Pre-calculate ALL crossing events upfront, or lazily?
+- How to handle DYN SL/TP where level changes with indicator value?
+- Event generation interface (indicator calc outputs events, not arrays?)
+
+=============================================================================
+CHANGE 5: State Machine as Switch-Case
+=============================================================================
+
+CURRENT: State checks scattered across many functions
+PROPOSED: Single switch-case statement, all state logic in one place
+
+Implementation:
+```typescript
+type State = "CASH" | "LONG" | "SHORT" | "TIMEOUT";
+
+interface TransitionResult {
+  newState: State;
+  action: "ENTER_LONG" | "ENTER_SHORT" | "EXIT_SL" | "EXIT_TP" | "EXIT_SIGNAL" | null;
+}
+
+function transition(state: State, event: Event, context: Context): TransitionResult {
+  switch (state) {
+    case "CASH":
+      if (event.type === "LONG_ENTRY_MET")
+        return { newState: "LONG", action: "ENTER_LONG" };
+      if (event.type === "SHORT_ENTRY_MET")
+        return { newState: "SHORT", action: "ENTER_SHORT" };
+      return { newState: "CASH", action: null };
+
+    case "LONG":
+      if (event.type === "SL_HIT")
+        return { newState: "TIMEOUT", action: "EXIT_SL" };
+      if (event.type === "TP_HIT")
+        return { newState: "TIMEOUT", action: "EXIT_TP" };
+      if (event.type === "EXIT_SIGNAL_MET")
+        return { newState: "TIMEOUT", action: "EXIT_SIGNAL" };
+      return { newState: "LONG", action: null };
+
+    case "SHORT":
+      // Mirror of LONG...
+
+    case "TIMEOUT":
+      if (event.type === "TIMEOUT_EXPIRED")
+        return { newState: "CASH", action: null };
+      return { newState: "TIMEOUT", action: null };
+  }
+}
+```
+
+Context parameter carries:
+- Timeout type (POST_TRADE, AMBIGUITY)
+- Entry direction (for timeout exit logic)
+- Cooldown remaining
+- Any other state-specific data
+
+Benefits:
+- All state logic in ONE place
+- Explicit transitions (easy to audit)
+- Matches hardware state machine principles (VHDL/embedded)
+- Easy to add new states or modify transitions
+
+=============================================================================
+CHANGE 6: Cache Optimization (Continuous Arrays)
+=============================================================================
+
+CPU caches work best with sequential memory access.
+
+BAD (cache unfriendly):
+```typescript
+indicators.forEach(ind => ind.values[i])  // jumping around memory
+```
+
+GOOD (cache friendly):
+```typescript
+const rsiValues = new Float64Array(numBars);  // contiguous memory
+for (let i = 0; i < numBars; i++) {
+  process(rsiValues[i]);  // sequential access
+}
+```
+
+Implementation:
+- Use TypedArrays (Float64Array, Uint8Array) for numerical data
+- Store indicator values in separate contiguous arrays
+- Process each array sequentially before moving to next
+- Potential 10x speedup for calculation-heavy operations
+
+=============================================================================
+MIGRATION STRATEGY - TO DISCUSS
+=============================================================================
+
+Option A: Big-Bang Rewrite
+- Start fresh with event-driven architecture
+- Risk: longer time without working system
+- Benefit: clean design, no legacy baggage
+
+Option B: Incremental Migration
+- Phase 1: State machine refactor (independent)
+- Phase 2: Synchronous logging (independent)
+- Phase 3: Event-based storage (independent)
+- Phase 4: Event-driven simulation (big change)
+- Risk: intermediate states may be awkward
+- Benefit: always have working system
+
+What can we keep?
+- Indicator library: YES (mostly)
+- Types/interfaces: MAYBE (need event types)
+- Stage 1 (data loading): YES
+- Stage 2 (indicator calc): NEEDS CHANGE (output events, not arrays)
+- Stage 3 (resampling): ELIMINATE or simplify
+- Stage 4 (evaluation): REPLACE with event-driven
+- Stage 5 (simulation): REPLACE with event-driven
+- Stage 6 (output): YES (mostly)
+
+=============================================================================
+OPEN QUESTIONS
+=============================================================================
+
+1. Timeline/priority for these changes?
+2. Big-bang vs incremental approach?
+3. How to handle DYN SL/TP in event-driven model?
+4. Event generation: upfront vs lazy?
+5. Testing strategy during migration?
+
+
+##4 ASYNC POLLUTION - SPECIFIC CODE ISSUE (Yuri Review)
+
+=============================================================================
+THE PROBLEM
+=============================================================================
+
+The IDatabase interface forces ALL methods to return Promises:
+
+Location: src/interfaces/database.ts
+```typescript
+export interface IDatabase {
+    logAlgoEvent(event: AlgoEvent): Promise<void>;
+    logSwapEvent(swap: SwapEvent): Promise<void>;
+    getAlgoEvents(options?): Promise<AlgoEvent[]>;
+    saveState(state: AlgoState): Promise<void>;
+    // ... all async
+}
+```
+
+But FakeDatabase just does synchronous operations:
+
+Location: src/simulation/fakes/fake-database.ts
+```typescript
+async logAlgoEvent(event: AlgoEvent): Promise<void> {
+    this.algoEvents.push(event);  // Just array.push()! Not async at all!
+}
+
+async logSwapEvent(swap: SwapEvent): Promise<void> {
+    this.swapEvents.push(swap);   // Just array.push()! Not async at all!
+}
+
+async saveState(state: AlgoState): Promise<void> {
+    this.state = { ...state };    // Just assignment! Not async at all!
+}
+```
+
+=============================================================================
+THE DOMINO EFFECT
+=============================================================================
+
+Because database.logAlgoEvent() returns Promise<void>, EVERY caller must await:
+
+```
+database.logAlgoEvent() - fake async (just array.push)
+  ↓ forces
+logStateTransition() - must be async
+  ↓ forces
+enterPosition() - must be async
+  ↓ forces
+checkEntry() - must be async
+  ↓ forces
+onBar() - must be async
+  ↓ forces
+runBacktestWithAlgoRunner() - must be async
+```
+
+RESULT: The entire simulation loop is async, awaiting synchronous array pushes.
+
+=============================================================================
+EVIDENCE FROM CODEBASE
+=============================================================================
+
+src/simulation/algo-runner.ts has 50+ async/await statements:
+
+- onBar() - async
+- closePosition() - async
+- checkEntry() - async
+- checkExitWithSubBars() - async
+- checkExit() - async
+- enterPosition() - async
+- exitPosition() - async
+- logStateTransition() - async
+- logConditionChange() - async
+- logIndicatorFlips() - async
+
+EVERY SINGLE ONE is async only because it eventually calls:
+  await this.database.logAlgoEvent(event)
+
+Which does nothing but:
+  this.algoEvents.push(event)
+
+=============================================================================
+IRONY: SYNC METHODS ALREADY EXIST (UNUSED)
+=============================================================================
+
+FakeDatabase already has sync helper methods that aren't being used:
+
+```typescript
+getAllAlgoEventsSync(): AlgoEvent[] {
+    return [...this.algoEvents];
+}
+
+getAllSwapEventsSync(): SwapEvent[] {
+    return [...this.swapEvents];
+}
+```
+
+Someone recognized the problem but didn't fix it properly!
+
+=============================================================================
+THE FIX
+=============================================================================
+
+Step 1: Create sync interface for in-memory logging
+
+```typescript
+// New interface for simulation (sync)
+export interface IEventLogger {
+    logAlgoEvent(event: AlgoEvent): void;      // sync
+    logSwapEvent(swap: SwapEvent): void;       // sync
+    getAlgoEvents(): AlgoEvent[];              // sync
+    getSwapEvents(): SwapEvent[];              // sync
+    clear(): void;                             // sync
+}
+
+// Keep async interface for real database I/O
+export interface IDatabase {
+    persistEvents(events: AlgoEvent[]): Promise<void>;  // actual I/O
+    loadEvents(): Promise<AlgoEvent[]>;                 // actual I/O
+}
+```
+
+Step 2: Update FakeDatabase to implement sync interface
+
+```typescript
+class InMemoryEventLogger implements IEventLogger {
+    private algoEvents: AlgoEvent[] = [];
+    private swapEvents: SwapEvent[] = [];
+
+    logAlgoEvent(event: AlgoEvent): void {
+        this.algoEvents.push(event);  // No async, no promise
+    }
+
+    logSwapEvent(swap: SwapEvent): void {
+        this.swapEvents.push(swap);   // No async, no promise
+    }
+
+    getAlgoEvents(): AlgoEvent[] {
+        return this.algoEvents;
+    }
+
+    getSwapEvents(): SwapEvent[] {
+        return this.swapEvents;
+    }
+
+    clear(): void {
+        this.algoEvents = [];
+        this.swapEvents = [];
+    }
+}
+```
+
+Step 3: Remove async/await from algo-runner.ts
+
+```typescript
+// BEFORE (current)
+private async logStateTransition(...): Promise<void> {
+    const event = { ... };
+    await this.database.logAlgoEvent(event);  // awaiting array.push()!
+}
+
+// AFTER (fixed)
+private logStateTransition(...): void {
+    const event = { ... };
+    this.logger.logAlgoEvent(event);  // sync, no await
+}
+```
+
+Step 4: Batch write after simulation (if needed)
+
+```typescript
+// Simulation is 100% sync
+const logger = new InMemoryEventLogger();
+for (const candle of candles) {
+    algo.onBar(candle, i);  // No await needed!
+}
+
+// Only async at the very end for actual I/O
+const events = logger.getAlgoEvents();
+await database.persistEvents(events);  // Real I/O, actually async
+```
+
+=============================================================================
+BENEFITS OF FIX
+=============================================================================
+
+1. Simpler code - no async/await pollution
+2. Better performance - no promise overhead in hot loop
+3. Easier debugging - synchronous call stack
+4. Clearer intent - async only where actual I/O happens
+5. Matches Yuri's principle: "async should only wrap actual I/O"
+
+=============================================================================
+PRIORITY
+=============================================================================
+
+This fix is INDEPENDENT of the event-driven simulation change.
+Can be done as Phase 2 of incremental migration.
+Relatively low risk - mostly removing unnecessary async keywords.
+
+
+##5 SUB-BAR PRECISION IN EVENT-DRIVEN MODEL
+
+=============================================================================
+CURRENT APPROACH (subbar-simulator.ts)
+=============================================================================
+
+The current system uses actual sub-bar candles for SL/TP precision:
+
+1. Load sub-bar candles (e.g., 1-minute candles within a 1-hour bar)
+2. Generate "price checkpoints" through each sub-bar:
+   - Open → nearest extreme → far extreme → Close
+   - 4 checkpoints per sub-bar
+3. Check SL/TP against each checkpoint sequentially
+4. Find exact checkpoint where trigger occurred
+
+Example: 1-hour bar with 15 × 1-minute sub-bars = 60 price checkpoints
+
+The "nearest extreme" logic determines intra-bar price path:
+```
+open=100, high=105, low=98, close=102
+Distance to high: |105-100| = 5
+Distance to low: |98-100| = 2 (closer!)
+Path: open(100) → low(98) → high(105) → close(102)
+```
+
+=============================================================================
+THE QUESTION FOR EVENT-DRIVEN
+=============================================================================
+
+In the heap-based model, SL/TP triggers become events:
+- { timestamp: X, type: SL_HIT, ... }
+- { timestamp: Y, type: TP_HIT, ... }
+
+How do we determine timestamp X and Y?
+
+=============================================================================
+OPTION A: Keep Sub-Bar Precision
+=============================================================================
+
+When generating SL/TP monitoring events:
+1. Load sub-bar candles
+2. Calculate exact trigger timestamp using checkpoint logic
+3. Insert precise event: { timestamp: exact_trigger_time, type: SL_HIT }
+
+Pros:
+- Preserves current precision
+- Results match current system exactly
+
+Cons:
+- Still needs sub-bar data loading infrastructure
+- Most events will be "dead" (position exits before they trigger)
+- Defeats some performance benefits of event-driven model
+
+=============================================================================
+OPTION B: Parent Bar with Order Estimation
+=============================================================================
+
+For each bar where SL or TP COULD trigger:
+1. Use OHLC to determine if it triggers
+2. Use "nearest extreme" logic to determine ORDER (SL vs TP first)
+3. Timestamp = bar_timestamp + (offset based on which extreme hits first)
+
+Example:
+```
+Bar: open=100, high=110, low=95, close=102
+SL=96, TP=108
+
+Distance: open to high = 10, open to low = 5
+Low is closer → price path: open → low → high → close
+
+SL at 96 would hit during "open → low" phase (first quarter of bar)
+TP at 108 would hit during "low → high" phase (second/third quarter)
+
+Result: SL triggers first (estimated time = bar_timestamp + 15min)
+```
+
+Pros:
+- No sub-bar data needed
+- Much simpler implementation
+- Gets the ORDER right (most important thing!)
+- ~10x+ faster event generation
+
+Cons:
+- Exact intra-bar timestamp is estimated, not precise
+- May differ slightly from current system's results
+
+=============================================================================
+OPTION C: Lazy Sub-Bar Loading (Hybrid)
+=============================================================================
+
+1. Initially generate events with estimated timestamps (Option B)
+2. Only load sub-bar data for bars that actually trigger
+3. Refine timestamp after the fact if needed
+
+Pros:
+- Best accuracy when needed
+- Minimal sub-bar loading (only ~1-5% of bars typically trigger)
+
+Cons:
+- Most complex to implement
+- May need two-pass processing
+
+=============================================================================
+KEY INSIGHT: ORDER > EXACT TIME
+=============================================================================
+
+For trading analysis, what matters most:
+
+1. WHICH event triggered? (SL vs TP vs Signal)
+2. In what ORDER? (if multiple could trigger same bar)
+3. At what PRICE? (determines P&L)
+
+The exact timestamp matters LEAST:
+- Backtesting is already an approximation
+- Real trading has slippage anyway
+- Stats wash out over thousands of trades
+- Reporting shows bar-level granularity anyway
+
+If SL and TP both could trigger in same bar, we need to know which
+triggers FIRST - but whether it was at 12:15:32 or 12:47:18 rarely
+affects the analysis.
+
+=============================================================================
+RECOMMENDATION
+=============================================================================
+
+Start with Option B (Parent Bar with Order Estimation):
+
+1. Use OHLC + nearest-extreme logic to determine trigger order
+2. Assign timestamps based on position in estimated price path:
+   - First quarter: bar_timestamp + (duration * 0.125)
+   - Second quarter: bar_timestamp + (duration * 0.375)
+   - Third quarter: bar_timestamp + (duration * 0.625)
+   - Fourth quarter: bar_timestamp + (duration * 0.875)
+
+3. Validate against current system on test data
+4. If results differ significantly, consider Option C
+
+This approach:
+- Eliminates sub-bar data loading from hot path
+- Preserves correct trigger ORDER
+- Enables ~10x performance improvement
+- Can be refined later if precision issues arise
+
+=============================================================================
+IMPLEMENTATION NOTES
+=============================================================================
+
+Event generation for SL/TP:
+
+```typescript
+function generateSLTPEvents(
+    entryBar: number,
+    entryPrice: number,
+    slLevel: number,
+    tpLevel: number,
+    direction: "LONG" | "SHORT",
+    candles: Candle[]
+): HeapEvent[] {
+    const events: HeapEvent[] = [];
+
+    for (let i = entryBar + 1; i < candles.length; i++) {
+        const candle = candles[i];
+        const { high, low, bucket } = candle;
+        const duration = getBarDuration(candle);
+
+        // Check if SL or TP could trigger this bar
+        const slHit = direction === "LONG" ? low <= slLevel : high >= slLevel;
+        const tpHit = direction === "LONG" ? high >= tpLevel : low <= tpLevel;
+
+        if (slHit || tpHit) {
+            // Determine order using nearest-extreme logic
+            const { firstTrigger, firstTime, secondTrigger, secondTime } =
+                resolveIntraBarOrder(candle, slLevel, tpLevel, direction);
+
+            if (firstTrigger === "SL") {
+                events.push({
+                    timestamp: bucket + firstTime,
+                    type: "SL_HIT",
+                    barIndex: i,
+                    price: slLevel
+                });
+            }
+            if (firstTrigger === "TP") {
+                events.push({
+                    timestamp: bucket + firstTime,
+                    type: "TP_HIT",
+                    barIndex: i,
+                    price: tpLevel
+                });
+            }
+            // Only first trigger matters - other becomes "dead"
+            break;
+        }
+    }
+
+    return events;
+}
+```
+
+The "dead events" pattern handles the case where we pre-generate
+TP event but SL actually triggers first (or vice versa).
+
+
+##6 CANDLE RESOLUTION & MIP-MAPPING (Yuri Clarification)
+
+=============================================================================
+THE MISUNDERSTANDING
+=============================================================================
+
+Feb S thought that `createChartPointsForSource()` was doing AGGREGATION
+of candles to different resolutions.
+
+WRONG: The function does NOT do aggregation.
+
+Yuri: "When this interpolated data source, it's not doing any aggregation...
+you will get on this resolution of candles you provided. And this is just
+an extra information that was needed for interpolated."
+
+=============================================================================
+WHAT createChartPointsForSource() ACTUALLY DOES
+=============================================================================
+
+Location: indicators/src/conversions.ts
+
+This function does FORMAT CONVERSION, not resolution conversion:
+
+```typescript
+createChartPointsForSource(candles: Candle[], source: string, candleResolution?: number): ChartPoint[]
+```
+
+- `1_close` → extracts close price from each candle → ChartPoint per candle
+- `2_typical` → extracts (H+L+C)/3 + volume → ChartPoint per candle
+- `2_interpolated_x4` → 4 points per candle (open→near_extreme→far_extreme→close)
+
+KEY: If you give it 1-hour candles, you get ChartPoints at 1-hour intervals!
+     (except interpolated which gives 4x points, but still within each candle)
+
+The `candleResolution` parameter is ONLY used for interpolated mode to
+calculate sub-timestamps within each candle. It does NOT resample data.
+
+=============================================================================
+THE CORRECT APPROACH: MIP-MAPPING
+=============================================================================
+
+Borrowed from computer graphics mipmapping technique:
+
+Step 1: Start with lowest resolution (your simulation resolution)
+        e.g., 5-minute candles
+
+Step 2: Aggregate UPWARD to create all higher resolutions:
+
+        5-min candles (base)
+              ↓ aggregate 4:1
+        20-min candles
+              ↓ aggregate 4:1
+        80-min candles
+              ↓ aggregate 4:1
+        320-min candles
+              ↓ etc...
+
+Step 3: Store ALL levels in memory
+
+Step 4: For each indicator, pick from pre-aggregated set based on
+        what resolution it needs
+
+MEMORY EFFICIENCY:
+- Each level is 4x smaller than the previous
+- Total overhead: ~33% more than base resolution alone
+- e.g., if base is 100MB, all levels together ≈ 133MB
+
+Yuri: "every index resolution takes four times less space...if you keep
+stacking them, you will not take more than 50% more space, even less,
+probably a third more space."
+
+COMPUTATION EFFICIENCY:
+- Go through base resolution once to create first aggregation
+- Each subsequent level processes only 1/4 of the previous
+- Total work: ~O(n) with small constant factor (~1.5x)
+
+=============================================================================
+CURRENT VS CORRECT WORKFLOW
+=============================================================================
+
+CURRENT (WRONG):
+1. Load candles at ONE resolution
+2. For each indicator, call createChartPointsForSource(candles, source)
+   → Gets ChartPoints at SAME resolution as candles
+3. Calculate indicator at that resolution
+4. AFTER calculation, resample signals to simulation resolution
+
+PROBLEMS:
+- If indicator needs 1-hour candles but we only have 5-min, we're stuck
+- Resampling SIGNALS is backwards (should resample DATA first)
+- Each indicator recalculates from same candles (wasteful)
+
+CORRECT (MIP-MAPPING):
+1. Load candles at lowest resolution (e.g., 5-min = simulation resolution)
+2. PRE-AGGREGATE to all higher resolutions (20m, 80m, 320m, etc.)
+3. Store all resolution levels in memory
+4. For each indicator:
+   a. Check what resolution it needs: indicator.getPointRequirements().resolution
+   b. Pick the right candles from pre-aggregated set
+   c. Call createChartPointsForSource() on THOSE candles
+   d. Calculate indicator → signals come out at indicator's natural resolution
+5. For simulation: use events (indicator crossings) not resampled signals
+
+=============================================================================
+AGGREGATION FUNCTION (NOT YET IMPLEMENTED)
+=============================================================================
+
+Need to implement candle aggregation:
+
+```typescript
+/**
+ * Aggregate candles by factor (e.g., 4x: 5min → 20min)
+ */
+function aggregateCandles(candles: Candle[], factor: number): Candle[] {
+    const result: Candle[] = [];
+
+    for (let i = 0; i < candles.length; i += factor) {
+        const slice = candles.slice(i, i + factor);
+        if (slice.length < factor) break; // incomplete period
+
+        result.push({
+            bucket: slice[0].bucket,
+            open: slice[0].open,
+            high: Math.max(...slice.map(c => c.high)),
+            low: Math.min(...slice.map(c => c.low)),
+            close: slice[slice.length - 1].close,
+            volume: slice.reduce((sum, c) => sum + c.volume, 0),
+        });
+    }
+
+    return result;
+}
+
+/**
+ * Build MIP-map of all resolution levels
+ */
+function buildCandleMipMap(
+    baseCandles: Candle[],
+    baseResolution: number,
+    maxResolution: number
+): Map<number, Candle[]> {
+    const mipMap = new Map<number, Candle[]>();
+    mipMap.set(baseResolution, baseCandles);
+
+    let current = baseCandles;
+    let currentRes = baseResolution;
+
+    while (currentRes * 4 <= maxResolution) {
+        const nextRes = currentRes * 4;
+        const aggregated = aggregateCandles(current, 4);
+        mipMap.set(nextRes, aggregated);
+
+        current = aggregated;
+        currentRes = nextRes;
+    }
+
+    return mipMap;
+}
+```
+
+=============================================================================
+HOW THIS FITS WITH EVENT-DRIVEN MODEL
+=============================================================================
+
+In the event-driven model:
+
+1. Build MIP-map upfront from base candles
+2. For each indicator:
+   a. Get its required resolution
+   b. Pick candles from MIP-map
+   c. Calculate indicator values
+   d. Extract CROSSING EVENTS (not signal arrays)
+   e. Push events to heap with timestamps
+
+3. Simulation loop:
+   - Pop events from heap by timestamp
+   - Process events (indicator crossings, SL/TP triggers, etc.)
+   - No per-bar iteration needed
+
+This eliminates:
+- Signal resampling (events have natural timestamps)
+- Per-bar indicator checking (pre-calculated as events)
+- Resolution mismatches (each indicator uses right resolution)
+
+=============================================================================
+OPEN QUESTIONS
+=============================================================================
+
+1. What factor to use for aggregation? 4x is standard but configurable?
+2. How to handle non-standard resolutions (e.g., 1h needs 12x from 5m)?
+3. Should we support non-power-of-4 aggregation?
+4. How to align bucket timestamps during aggregation?
