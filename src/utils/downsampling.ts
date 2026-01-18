@@ -1,10 +1,3 @@
-/**
- * Downsampling Utilities
- *
- * Functions for reducing data points for storage and visualization.
- * Preserves important features like peaks and valleys.
- */
-
 import type { EquityPoint } from "../output/types.ts";
 
 // =============================================================================

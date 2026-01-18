@@ -19,7 +19,7 @@
  * - Follows architecture principle: "Stages should be separate and explicit"
  */
 
-import type { Candle, AlgoParams } from "../../core/types.ts";
+import type { Candle } from "../../core/types.ts";
 import type { BacktestInput } from "../../core/config.ts";
 import { BacktestInputSchema } from "../../core/config.ts";
 
@@ -36,7 +36,7 @@ export interface DataLoadingResult {
     /** Validated and parsed backtest input */
     validatedInput: BacktestInput;
 
-    /** Candles filtered to the requested time range */
+    /** Candles filtered to the requested time range (including pre-warming bars if applicable) */
     filteredCandles: Candle[];
 
     /** Actual start time (first candle timestamp) */
@@ -50,27 +50,19 @@ export interface DataLoadingResult {
 
     /** Whether the result is empty (no candles in range) */
     isEmpty: boolean;
-}
 
-/**
- * Data requirements extracted from algo configuration.
- * Used for determining what data needs to be loaded.
- */
-export interface DataRequirements {
-    /** Required symbols (currently single symbol) */
-    symbols: string[];
+    /**
+     * Index in filteredCandles where actual trading should start.
+     * Pre-warming bars (indices 0 to tradingStartIndex-1) are used for indicator warmup only.
+     * Without pre-warming, this equals 0.
+     */
+    tradingStartIndex: number;
 
-    /** Required timeframes based on indicator configurations */
-    timeframes: string[];
-
-    /** Start timestamp */
-    startTime: number;
-
-    /** End timestamp */
-    endTime: number;
-
-    /** Estimated warmup period in candles */
-    estimatedWarmupCandles: number;
+    /**
+     * Number of pre-warming seconds actually loaded (may be less than requested if data unavailable).
+     * 0 if no pre-warming was applied.
+     */
+    actualPreWarmingSeconds: number;
 }
 
 // =============================================================================
@@ -82,31 +74,64 @@ export interface DataRequirements {
  *
  * @param candles - Raw historical price data (typically 1m candles)
  * @param input - Backtest input configuration
+ * @param warmupSeconds - Optional: seconds of pre-warming data to load before startTime.
+ *                        If provided, extra bars will be loaded before startTime for indicator warmup,
+ *                        and tradingStartIndex will indicate where actual trading should begin.
  * @returns DataLoadingResult with validated config and filtered candles
  *
  * @example
  * ```typescript
+ * // Without pre-warming (backward compatible)
  * const result = executeDataLoading(candles, input);
- * if (result.isEmpty) {
- *   return createEmptyOutput();
- * }
- * // Continue to Stage 2...
+ *
+ * // With pre-warming (for aligned warmup)
+ * const warmupSec = getWarmupSeconds(indicatorConfigs);
+ * const result = executeDataLoading(candles, input, warmupSec);
+ * // result.tradingStartIndex tells you where to start trading
  * ```
  */
-export function executeDataLoading(candles: Candle[], input: BacktestInput): DataLoadingResult {
+export function executeDataLoading(
+    candles: Candle[],
+    input: BacktestInput,
+    warmupSeconds: number = 0
+): DataLoadingResult {
     // Step 1: Validate input schema
     const validatedInput = BacktestInputSchema.parse(input);
     const { algoConfig, runSettings } = validatedInput;
 
-    // Step 2: Filter candles to requested time range
-    const filteredCandles = filterCandlesToRange(candles, runSettings.startTime!, runSettings.endTime!);
+    const requestedStartTime = runSettings.startTime!;
+    const requestedEndTime = runSettings.endTime!;
 
-    // Step 3: Determine actual time bounds
+    // Step 2: Calculate pre-warming start time
+    // Load extra bars before the requested start time for indicator warmup
+    const preWarmStartTime = requestedStartTime - warmupSeconds;
+
+    // Step 3: Filter candles to extended range (including pre-warming)
+    const filteredCandles = filterCandlesToRange(candles, preWarmStartTime, requestedEndTime);
+
+    // Step 4: Find where actual trading should start
+    // This is the first candle at or after the original requested start time
+    let tradingStartIndex = 0;
+    if (warmupSeconds > 0 && filteredCandles.length > 0) {
+        tradingStartIndex = filteredCandles.findIndex((c) => c.bucket >= requestedStartTime);
+        // If no candle found at/after requestedStartTime, use 0 (shouldn't happen normally)
+        if (tradingStartIndex === -1) {
+            tradingStartIndex = 0;
+        }
+    }
+
+    // Step 5: Calculate actual pre-warming achieved
+    const actualPreWarmingSeconds =
+        tradingStartIndex > 0 && filteredCandles.length > 0
+            ? requestedStartTime - filteredCandles[0]!.bucket
+            : 0;
+
+    // Step 6: Determine actual time bounds
     const isEmpty = filteredCandles.length === 0;
-    const actualStartTime = isEmpty ? runSettings.startTime! : filteredCandles[0]!.bucket;
-    const actualEndTime = isEmpty ? runSettings.endTime! : filteredCandles[filteredCandles.length - 1]!.bucket;
+    const actualStartTime = isEmpty ? requestedStartTime : filteredCandles[0]!.bucket;
+    const actualEndTime = isEmpty ? requestedEndTime : filteredCandles[filteredCandles.length - 1]!.bucket;
 
-    // Step 4: Calculate initial capital
+    // Step 7: Calculate initial capital
     const initialCapital = algoConfig.params.startingCapitalUSD * runSettings.capitalScaler;
 
     return {
@@ -116,6 +141,8 @@ export function executeDataLoading(candles: Candle[], input: BacktestInput): Dat
         actualEndTime,
         initialCapital,
         isEmpty,
+        tradingStartIndex,
+        actualPreWarmingSeconds,
     };
 }
 
@@ -131,88 +158,3 @@ export function filterCandlesToRange(candles: Candle[], startTime: number, endTi
     return candles.filter((c) => c.bucket >= startTime && c.bucket <= endTime);
 }
 
-/**
- * Extract data requirements from algo configuration.
- *
- * Used for determining what data needs to be loaded before
- * the backtest can run. This supports future optimizations
- * where we load only required data.
- *
- * @param algoParams - Algorithm parameters
- * @param runSettings - Run settings with time range
- * @returns Data requirements specification
- */
-export function extractDataRequirements(algoParams: AlgoParams, startTime: number, endTime: number): DataRequirements {
-    // Extract timeframes from all indicator configurations
-    const timeframes = new Set<string>();
-    const processCondition = (condition: { required: any[]; optional: any[] } | undefined) => {
-        if (!condition) return;
-        for (const config of [...condition.required, ...condition.optional]) {
-            if (config.timeframe) {
-                timeframes.add(config.timeframe);
-            }
-        }
-    };
-
-    processCondition(algoParams.longEntry);
-    processCondition(algoParams.longExit);
-    processCondition(algoParams.shortEntry);
-    processCondition(algoParams.shortExit);
-
-    // Default to 1m if no timeframes specified
-    if (timeframes.size === 0) {
-        timeframes.add("1m");
-    }
-
-    // Estimate warmup based on indicator periods
-    // This is a rough estimate; actual warmup is calculated during indicator computation
-    const estimatedWarmupCandles = estimateWarmupPeriod(algoParams);
-
-    return {
-        symbols: [], // Symbol comes from runSettings, not algoParams
-        timeframes: Array.from(timeframes),
-        startTime,
-        endTime,
-        estimatedWarmupCandles,
-    };
-}
-
-/**
- * Estimate warmup period from algo parameters.
- *
- * Scans all indicator configurations to find the maximum period
- * that would require warmup data.
- *
- * @param algoParams - Algorithm parameters
- * @returns Estimated warmup candles needed
- */
-function estimateWarmupPeriod(algoParams: AlgoParams): number {
-    let maxPeriod = 0;
-
-    const scanCondition = (condition: { required: any[]; optional: any[] } | undefined) => {
-        if (!condition) return;
-        for (const config of [...condition.required, ...condition.optional]) {
-            // Look for period-like parameters
-            if (typeof config.period === "number") {
-                maxPeriod = Math.max(maxPeriod, config.period);
-            }
-            if (typeof config.fastPeriod === "number") {
-                maxPeriod = Math.max(maxPeriod, config.fastPeriod);
-            }
-            if (typeof config.slowPeriod === "number") {
-                maxPeriod = Math.max(maxPeriod, config.slowPeriod);
-            }
-            if (typeof config.signalPeriod === "number") {
-                maxPeriod = Math.max(maxPeriod, config.signalPeriod);
-            }
-        }
-    };
-
-    scanCondition(algoParams.longEntry);
-    scanCondition(algoParams.longExit);
-    scanCondition(algoParams.shortEntry);
-    scanCondition(algoParams.shortExit);
-
-    // Add buffer for indicator calculations
-    return Math.max(maxPeriod * 2, 50);
-}

@@ -195,13 +195,13 @@ describe("TrailingStopIndicator", () => {
 
             // Price rises to 52000, SL ratchets to 50440
             // Then price drops to 50000 which is below 50440, so triggers
-            expect(results[0].hit).toBe(false);
-            expect(results[1].hit).toBe(false);
-            expect(results[2].hit).toBe(false);
-            expect(results[3].hit).toBe(true);
+            expect(results[0]!.hit).toBe(false);
+            expect(results[1]!.hit).toBe(false);
+            expect(results[2]!.hit).toBe(false);
+            expect(results[3]!.hit).toBe(true);
 
-            expect(results[1].extremePrice).toBe(52000);
-            expect(results[1].currentLevel).toBeCloseTo(50440, 0);
+            expect(results[1]!.extremePrice).toBe(52000);
+            expect(results[1]!.currentLevel).toBeCloseTo(50440, 0);
         });
 
         test("does not trigger when price stays above trailing level", () => {
@@ -224,8 +224,8 @@ describe("TrailingStopIndicator", () => {
             const results = ts.calculate([52000, 50500], [1001, 1002]);
             // Extreme rises to 52000, SL = 51000
             // Price drops to 50500 which is below 51000
-            expect(results[0].hit).toBe(false);
-            expect(results[1].hit).toBe(true);
+            expect(results[0]!.hit).toBe(false);
+            expect(results[1]!.hit).toBe(true);
         });
     });
 
@@ -242,10 +242,10 @@ describe("TrailingStopIndicator", () => {
 
             // Price falls to 48000, SL ratchets to 49440
             // Then price rises to 50000 which is above 49440, so triggers
-            expect(results[0].hit).toBe(false);
-            expect(results[1].hit).toBe(false);
-            expect(results[2].hit).toBe(false);
-            expect(results[3].hit).toBe(true);
+            expect(results[0]!.hit).toBe(false);
+            expect(results[1]!.hit).toBe(false);
+            expect(results[2]!.hit).toBe(false);
+            expect(results[3]!.hit).toBe(true);
         });
     });
 
@@ -259,9 +259,9 @@ describe("TrailingStopIndicator", () => {
             // After 55000: SL = 53900
             // 48000 triggers (below 53900)
             // 60000 stays triggered
-            expect(results[0].hit).toBe(false);
-            expect(results[1].hit).toBe(true);
-            expect(results[2].hit).toBe(true);
+            expect(results[0]!.hit).toBe(false);
+            expect(results[1]!.hit).toBe(true);
+            expect(results[2]!.hit).toBe(true);
         });
     });
 });
@@ -288,9 +288,9 @@ describe("BalanceIndicator", () => {
             // At $110: P&L = 100 * (110 - 100) = 1000
             // At $90: P&L = 100 * (90 - 100) = -1000
             // At $100: P&L = 0
-            expect(results[0].unrealizedPnL).toBeCloseTo(1000, 0);
-            expect(results[1].unrealizedPnL).toBeCloseTo(-1000, 0);
-            expect(results[2].unrealizedPnL).toBeCloseTo(0, 0);
+            expect(results[0]!.unrealizedPnL).toBeCloseTo(1000, 0);
+            expect(results[1]!.unrealizedPnL).toBeCloseTo(-1000, 0);
+            expect(results[2]!.unrealizedPnL).toBeCloseTo(0, 0);
         });
 
         test("calculates balance including P&L", () => {
@@ -306,7 +306,7 @@ describe("BalanceIndicator", () => {
             const results = bal.calculate([110], [1001]);
 
             // Balance = initial capital + unrealized P&L = 10000 + 1000 = 11000
-            expect(results[0].balance).toBeCloseTo(11000, 0);
+            expect(results[0]!.balance).toBeCloseTo(11000, 0);
         });
 
         test("applies entry fee", () => {
@@ -376,9 +376,9 @@ describe("BalanceIndicator", () => {
             // At $90: P&L = 100 * (100 - 90) = 1000 (SHORT profits when price falls)
             // At $110: P&L = 100 * (100 - 110) = -1000
             // At $100: P&L = 0
-            expect(results[0].unrealizedPnL).toBeCloseTo(1000, 0);
-            expect(results[1].unrealizedPnL).toBeCloseTo(-1000, 0);
-            expect(results[2].unrealizedPnL).toBeCloseTo(0, 0);
+            expect(results[0]!.unrealizedPnL).toBeCloseTo(1000, 0);
+            expect(results[1]!.unrealizedPnL).toBeCloseTo(-1000, 0);
+            expect(results[2]!.unrealizedPnL).toBeCloseTo(0, 0);
         });
 
         test("applies entry slippage for SHORT", () => {

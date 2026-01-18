@@ -28,14 +28,6 @@ export type RunStatus = "NEW" | "RUNNING" | "DONE"; //Run status for tracking al
 export type OrderType = "MARKET" | "TWAP" | "SMART" | "LIMIT";
 
 
-//Parameters for ladder-based position sizing or entry/exit levels.Used to create multiple levels at different price offsets.
-export interface LadderParams { //Map of <offset, weight> in percent //
-    levels: Record<number, number>;
-    direction: "UP" | "DOWN" | "CENTER"; //offset direction
-    method: "CLAMP" | "SCALE"; //hether to remove levels beyond limit (CLAMP) or scale proportionally (SCALE)
-    normalize: boolean; //Whether to require all weights to be normalized
-}
-
 // VALUE CONFIGURATION
 // ABS means a fixed dollar amount (like "$100 stop loss"), REL means a percentage of something (like "2% of entry price" or "50% of capital"), 
 //and DYN means a percentage that gets dynamically adjusted by an indicator's value (like "2% stop loss but scaled up/down based on current volatility").
@@ -43,11 +35,10 @@ export type ValueType = "ABS" | "REL" | "DYN";
 
 
 export interface ValueConfig {
-    type: ValueType;     // Applicable to both price levels and position sizes */
-    value: number;     // USD price or amount if type=ABS, percent otherwise */
-    valueFactor?: IndicatorConfig; // Single-use value-modulating indicator (if type=DYN) */
-    inverted?: boolean;     // Scale up (position size) or down (stop loss) based on indicator's value */
-    ladder?: LadderParams; //Persistent set of levels generated after value * valueFactor evaluation
+    type: ValueType;     // Applicable to both price levels and position sizes
+    value: number;       // USD price or amount if type=ABS, percent otherwise
+    valueFactor?: IndicatorConfig; // Single-use value-modulating indicator (if type=DYN)
+    inverted?: boolean;  // Scale up (position size) or down (stop loss) based on indicator's value
 }
 
 //Conditions to ENTER a trade
@@ -96,8 +87,13 @@ export interface AlgoConfig {
 }
 
 
-//Configuration for a specific run (backtest or live trading) "How / when to run a given strat" - @yuri consider whether i should exclude the some of the fields such as closepositiononexit, exchangeID etc. This is defined simiar
-//to the main types file with most of the fields as pass throughs.
+/**
+ * Configuration for a specific run (backtest or live trading).
+ * "How / when to run a given strat"
+ *
+ * NOTE: Some fields (status, exchangeID, launchTime) are unused in backtesting
+ * but kept for consistency with the live trading system schema.
+ */
 export interface RunSettings {
     userID: string;
     /** A pair of algoID + version reference a unique read-only AlgoConfig */

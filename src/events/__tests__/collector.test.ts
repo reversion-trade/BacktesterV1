@@ -544,7 +544,7 @@ describe("emitStateTransition", () => {
 
     it("includes trade ID when in position", () => {
         // Enter position
-        collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+        collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
         collector.emitStateTransition(0, 1000, "CASH", "LONG", "ENTRY_SIGNAL");
 
         const events = collector.getEvents();
@@ -567,16 +567,7 @@ describe("swap events", () => {
 
     describe("emitEntrySwap", () => {
         it("creates swap event with correct structure", () => {
-            const tradeId = collector.emitEntrySwap(
-                0, // barIndex
-                1000, // timestamp
-                "LONG", // direction
-                42000, // price
-                1000, // usdAmount
-                0.0238, // assetAmount
-                1, // feeUSD
-                0.5 // slippageUSD
-            );
+            const tradeId = collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
 
             expect(tradeId).toBe(1);
 
@@ -594,10 +585,10 @@ describe("swap events", () => {
         });
 
         it("increments trade ID", () => {
-            const id1 = collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+            const id1 = collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
             collector.emitExitSwap(1, 1001, "LONG", 42500, 0.0238, 1010, 1, 0.5);
 
-            const id2 = collector.emitEntrySwap(2, 1002, "LONG", 42500, 1000, 0.0235, 1, 0.5);
+            const id2 = collector.emitEntrySwap(2, 1002, 42500, 1000, 0.0235, 1, 0.5);
 
             expect(id1).toBe(1);
             expect(id2).toBe(2);
@@ -606,7 +597,7 @@ describe("swap events", () => {
         it("sets current trade ID", () => {
             expect(collector.getCurrentTradeId()).toBeNull();
 
-            collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+            collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
 
             expect(collector.getCurrentTradeId()).toBe(1);
         });
@@ -614,7 +605,7 @@ describe("swap events", () => {
 
     describe("emitExitSwap", () => {
         it("creates swap event with correct structure", () => {
-            collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+            collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
             collector.emitExitSwap(10, 1010, "LONG", 42500, 0.0238, 1010, 1, 0.5);
 
             const events = collector.getEvents();
@@ -628,7 +619,7 @@ describe("swap events", () => {
         });
 
         it("returns TradeEvent with correct P&L calculation", () => {
-            collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+            collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
             const trade = collector.emitExitSwap(10, 1010, "LONG", 42500, 0.0238, 1011.9, 1, 0.5);
 
             expect(trade).not.toBeNull();
@@ -641,7 +632,7 @@ describe("swap events", () => {
         });
 
         it("clears current trade ID", () => {
-            collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+            collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
             expect(collector.getCurrentTradeId()).toBe(1);
 
             collector.emitExitSwap(10, 1010, "LONG", 42500, 0.0238, 1011.9, 1, 0.5);
@@ -667,7 +658,7 @@ describe("buildTradeEvents", () => {
     });
 
     it("pairs entry and exit swaps into trade events", () => {
-        collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+        collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
         collector.emitExitSwap(10, 1010, "LONG", 42500, 0.0238, 1011.9, 1, 0.5);
 
         const trades = collector.buildTradeEvents();
@@ -681,11 +672,11 @@ describe("buildTradeEvents", () => {
 
     it("handles multiple trades", () => {
         // Trade 1
-        collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+        collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
         collector.emitExitSwap(10, 1010, "LONG", 42500, 0.0238, 1011.9, 1, 0.5);
 
         // Trade 2
-        collector.emitEntrySwap(20, 1020, "LONG", 42500, 1000, 0.0235, 1, 0.5);
+        collector.emitEntrySwap(20, 1020, 42500, 1000, 0.0235, 1, 0.5);
         collector.emitExitSwap(30, 1030, "LONG", 43000, 0.0235, 1011.8, 1, 0.5);
 
         const trades = collector.buildTradeEvents();
@@ -696,7 +687,7 @@ describe("buildTradeEvents", () => {
     });
 
     it("calculates P&L correctly", () => {
-        collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+        collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
         collector.emitExitSwap(10, 1010, "LONG", 42500, 0.0238, 1100, 1, 0.5);
 
         const trades = collector.buildTradeEvents();
@@ -706,7 +697,7 @@ describe("buildTradeEvents", () => {
     });
 
     it("calculates duration correctly", () => {
-        collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+        collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
         collector.emitExitSwap(100, 2000, "LONG", 42500, 0.0238, 1100, 1, 0.5);
 
         const trades = collector.buildTradeEvents();
@@ -721,7 +712,7 @@ describe("buildTradeEvents", () => {
     });
 
     it("ignores unpaired entry swap", () => {
-        collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+        collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
         // No exit
 
         const trades = collector.buildTradeEvents();
@@ -739,7 +730,7 @@ describe("emitSpecialIndicatorEvent", () => {
     beforeEach(() => {
         collector = new EventCollector("BTC");
         // Enter a position first
-        collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+        collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
     });
 
     it("emits SL_SET event", () => {
@@ -796,7 +787,7 @@ describe("reset", () => {
 
     it("clears all events", () => {
         collector.emitStateTransition(0, 1000, "CASH", "LONG", "ENTRY_SIGNAL");
-        collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+        collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
 
         const eventsBefore = collector.getEvents();
         expect(eventsBefore.algoEvents.length).toBe(1);
@@ -819,7 +810,7 @@ describe("reset", () => {
     });
 
     it("clears current trade ID", () => {
-        collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+        collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
         expect(collector.getCurrentTradeId()).toBe(1);
 
         collector.reset();
@@ -828,7 +819,7 @@ describe("reset", () => {
     });
 
     it("resets ID counters", () => {
-        collector.emitEntrySwap(0, 1000, "LONG", 42000, 1000, 0.0238, 1, 0.5);
+        collector.emitEntrySwap(0, 1000, 42000, 1000, 0.0238, 1, 0.5);
         collector.emitExitSwap(10, 1010, "LONG", 42500, 0.0238, 1100, 1, 0.5);
 
         collector.reset();
@@ -836,7 +827,7 @@ describe("reset", () => {
         // Re-register indicators after reset
         collector.registerIndicators([createIndicatorInfo("rsi14", "RSI", "LONG_ENTRY", true)]);
 
-        const newTradeId = collector.emitEntrySwap(0, 2000, "LONG", 43000, 1000, 0.0233, 1, 0.5);
+        const newTradeId = collector.emitEntrySwap(0, 2000, 43000, 1000, 0.0233, 1, 0.5);
         expect(newTradeId).toBe(1); // Should start from 1 again
     });
 });

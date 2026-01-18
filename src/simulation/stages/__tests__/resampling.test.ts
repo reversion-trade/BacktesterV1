@@ -10,13 +10,15 @@
 import { describe, it, expect } from "bun:test";
 import {
     executeResampling,
+    type ResamplingResult,
+    type ResamplingInput,
+} from "../resampling.ts";
+import {
     validateResamplingResult,
     getResampledSignalAtBar,
     getTimestampForBar,
     formatResamplingDebugInfo,
-    type ResamplingResult,
-    type ResamplingInput,
-} from "../resampling.ts";
+} from "./test-utils.ts";
 import {
     getNextLowerBucket,
     generateTimestamps,
@@ -31,6 +33,17 @@ import type { SignalCache } from "../../../indicators/calculator.ts";
 // =============================================================================
 // TEST UTILITIES
 // =============================================================================
+
+/**
+ * Create a mock SignalCache that matches the interface
+ */
+function createMockSignalCache(data: Map<string, boolean[]> = new Map()): SignalCache {
+    return {
+        get: (key: string) => data.get(key),
+        has: (key: string) => data.has(key),
+        keys: () => Array.from(data.keys()),
+    };
+}
 
 function createCandle(bucket: number, close: number = 42000): Candle {
     return {
@@ -90,7 +103,7 @@ describe("getNextLowerBucket", () => {
 
     it("returns minimum bucket for smallest resolution", () => {
         const result = getNextLowerBucket(RESOLUTION_BUCKETS[0]!);
-        expect(result).toBe(RESOLUTION_BUCKETS[0]);
+        expect(result).toBe(RESOLUTION_BUCKETS[0]!);
     });
 
     it("handles resolution larger than any bucket", () => {
@@ -285,7 +298,7 @@ describe("executeResampling", () => {
     it("handles empty input", () => {
         const input: ResamplingInput = {
             candles: [],
-            signalCache: new Map(),
+            signalCache: createMockSignalCache(),
             indicatorConfigs: [],
             warmupCandles: 0,
         };
@@ -301,7 +314,7 @@ describe("executeResampling", () => {
         const candles = [createCandle(0), createCandle(60), createCandle(120)];
         const input: ResamplingInput = {
             candles,
-            signalCache: new Map(),
+            signalCache: createMockSignalCache(),
             indicatorConfigs: [],
             warmupCandles: 0,
         };
@@ -317,7 +330,7 @@ describe("executeResampling", () => {
         const candles = [createCandle(0), createCandle(60)];
         const input: ResamplingInput = {
             candles,
-            signalCache: new Map(),
+            signalCache: createMockSignalCache(),
             indicatorConfigs: [],
             warmupCandles: 0,
         };
@@ -331,7 +344,7 @@ describe("executeResampling", () => {
         const candles = [createCandle(0), createCandle(60), createCandle(120)];
         const input: ResamplingInput = {
             candles,
-            signalCache: new Map(),
+            signalCache: createMockSignalCache(),
             indicatorConfigs: [],
             warmupCandles: 10,
         };
@@ -346,7 +359,7 @@ describe("executeResampling", () => {
         const candles = [createCandle(0), createCandle(60), createCandle(120)];
         const input: ResamplingInput = {
             candles,
-            signalCache: new Map(),
+            signalCache: createMockSignalCache(),
             indicatorConfigs: [],
             warmupCandles: 0,
         };
@@ -359,7 +372,7 @@ describe("executeResampling", () => {
 
     it("resampled signals interface works correctly", () => {
         const candles = [createCandle(0), createCandle(60)];
-        const signalCache: SignalCache = new Map([["testKey", [true, false]]]);
+        const signalCache = createMockSignalCache(new Map([["testKey", [true, false]]]));
         const input: ResamplingInput = {
             candles,
             signalCache,

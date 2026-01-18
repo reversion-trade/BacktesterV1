@@ -82,7 +82,7 @@ export function loadBTCCandles(): Candle[] {
  */
 function validateCandles(candles: Candle[]): void {
     for (let i = 0; i < candles.length; i++) {
-        const c = candles[i];
+        const c = candles[i]!;
 
         // Check for NaN values
         if (isNaN(c.bucket) || isNaN(c.open) || isNaN(c.high) || isNaN(c.low) || isNaN(c.close) || isNaN(c.volume)) {
@@ -101,7 +101,7 @@ function validateCandles(candles: Candle[]): void {
         }
 
         // Check timestamp ordering (should be ascending)
-        if (i > 0 && candles[i].bucket <= candles[i - 1].bucket) {
+        if (i > 0 && candles[i]!.bucket <= candles[i - 1]!.bucket) {
             throw new Error(`Invalid timestamp ordering at index ${i}: timestamps must be ascending`);
         }
     }
@@ -139,7 +139,7 @@ export function resampleCandles(candles: Candle[], targetIntervalMs: number): Ca
     if (candles.length === 0) return [];
 
     const resampled: Candle[] = [];
-    let currentBucket = Math.floor(candles[0].bucket / targetIntervalMs) * targetIntervalMs;
+    let currentBucket = Math.floor(candles[0]!.bucket / targetIntervalMs) * targetIntervalMs;
     let currentCandles: Candle[] = [];
 
     for (const candle of candles) {
@@ -169,10 +169,10 @@ export function resampleCandles(candles: Candle[], targetIntervalMs: number): Ca
 function aggregateCandles(candles: Candle[], bucket: number): Candle {
     return {
         bucket,
-        open: candles[0].open,
+        open: candles[0]!.open,
         high: Math.max(...candles.map((c) => c.high)),
         low: Math.min(...candles.map((c) => c.low)),
-        close: candles[candles.length - 1].close,
+        close: candles[candles.length - 1]!.close,
         volume: candles.reduce((sum, c) => sum + c.volume, 0),
     };
 }
@@ -206,12 +206,12 @@ export function findPatternSlices(candles: Candle[]): {
 
     for (let i = 0; i < candles.length - windowSize; i += 100) {
         const window = candles.slice(i, i + windowSize);
-        const startPrice = window[0].close;
-        const endPrice = window[window.length - 1].close;
+        const startPrice = window[0]!.close;
+        const endPrice = window[window.length - 1]!.close;
         const pctChange = (endPrice - startPrice) / startPrice;
 
         // Calculate volatility (standard deviation of returns)
-        const returns = window.slice(1).map((c, j) => (c.close - window[j].close) / window[j].close);
+        const returns = window.slice(1).map((c, j) => (c.close - window[j]!.close) / window[j]!.close);
         const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
         const variance = returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length;
         const volatility = Math.sqrt(variance);
@@ -255,9 +255,9 @@ export function getDataSummary(candles: Candle[]): {
 
     return {
         count: candles.length,
-        startTime: new Date(candles[0].bucket),
-        endTime: new Date(candles[candles.length - 1].bucket),
-        durationDays: (candles[candles.length - 1].bucket - candles[0].bucket) / (24 * 60 * 60 * 1000),
+        startTime: new Date(candles[0]!.bucket),
+        endTime: new Date(candles[candles.length - 1]!.bucket),
+        durationDays: (candles[candles.length - 1]!.bucket - candles[0]!.bucket) / (24 * 60 * 60 * 1000),
         priceRange: {
             min: Math.min(...prices),
             max: Math.max(...prices),

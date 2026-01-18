@@ -6,7 +6,7 @@
  * This module exports all stages of the modular backtester pipeline.
  *
  * @architecture
- * The backtester is organized into 6 explicit stages:
+ * The backtester is organized into 7 explicit stages:
  *
  * ```
  * ┌─────────────────────────────────────────────────────────────────┐
@@ -14,6 +14,20 @@
  * │  ─────────────────────                                          │
  * │  Validate config, filter candles to time range                  │
  * │  Output: DataLoadingResult                                      │
+ * └─────────────────────────────────────────────────────────────────┘
+ *                               ↓
+ * ┌─────────────────────────────────────────────────────────────────┐
+ * │  Stage 1.5: Sub-Bar Loading                                     │
+ * │  ──────────────────────────                                     │
+ * │  Fetch lower-timeframe candles for granular SL/TP simulation    │
+ * │  Output: SubBarLoadingResult                                    │
+ * └─────────────────────────────────────────────────────────────────┘
+ *                               ↓
+ * ┌─────────────────────────────────────────────────────────────────┐
+ * │  Stage 1.6: ValueFactor Pre-Calculation                         │
+ * │  ────────────────────────────────────                           │
+ * │  Calculate DYN SL/TP indicators at sub-bar granularity          │
+ * │  Output: ValueFactorLoadingResult (lookup functions)            │
  * └─────────────────────────────────────────────────────────────────┘
  *                               ↓
  * ┌─────────────────────────────────────────────────────────────────┐
@@ -39,16 +53,16 @@
  * └─────────────────────────────────────────────────────────────────┘
  *                               ↓
  * ┌─────────────────────────────────────────────────────────────────┐
- * │  Stage 5: Simulation Loop                                       │
- * │  ────────────────────────                                       │
- * │  Forward pass through candles, emit events                      │
+ * │  Stage 5: Simulation Loop (with Sub-Bar SL/TP)                  │
+ * │  ─────────────────────────────────────────────                  │
+ * │  Forward pass through candles, granular SL/TP checking          │
  * │  Output: SimulationResult                                        │
  * └─────────────────────────────────────────────────────────────────┘
  *                               ↓
  * ┌─────────────────────────────────────────────────────────────────┐
  * │  Stage 6: Output Generation                                     │
  * │  ──────────────────────────                                     │
- * │  Calculate metrics, assemble final output                       │
+ * │  Calculate metrics with sub-bar equity data                     │
  * │  Output: BacktestOutput                                         │
  * └─────────────────────────────────────────────────────────────────┘
  * ```
@@ -82,21 +96,56 @@
 export {
     executeDataLoading,
     filterCandlesToRange,
-    extractDataRequirements,
     type DataLoadingResult,
-    type DataRequirements,
 } from "./data-loading.ts";
+
+// =============================================================================
+// STAGE 1.1: MIP-MAP BUILDING (Multi-Resolution Candle Aggregation)
+// =============================================================================
+export {
+    executeMipMapBuilding,
+    createMipMapInputFromDataResult,
+    detectCandleResolution,
+    type MipMapBuildingResult,
+    type MipMapBuildingInput,
+} from "./mipmap-building.ts";
+
+// =============================================================================
+// STAGE 1.5: SUB-BAR LOADING (Granular SL/TP Simulation)
+// =============================================================================
+export {
+    executeSubBarLoading,
+    getSubBarsForParent,
+    getExpectedSubBarCount,
+    hasSubBarsForParent,
+    type SubBarLoadingResult,
+    type SubBarLoadingInput,
+} from "./subbar-loading.ts";
+
+// =============================================================================
+// STAGE 1.6: VALUEFACTOR LOADING (Dynamic SL/TP Indicators)
+// =============================================================================
+export {
+    executeValueFactorLoading,
+    extractValueFactorConfigs,
+    flattenSubBarCandles,
+    createStopLossFactorLookup,
+    createTakeProfitFactorLookup,
+    type ValueFactorLoadingResult,
+    type ValueFactorLoadingInput,
+    type ValueFactorConfig,
+} from "./valuefactor-loading.ts";
 
 // =============================================================================
 // STAGE 2: INDICATOR PRE-CALCULATION
 // =============================================================================
 export {
     executeIndicatorCalculation,
+    executeIndicatorCalculationWithMipMap,
     createIndicatorInputFromDataResult,
-    validateIndicatorResult,
-    getSignalAtBar,
     type IndicatorCalculationResult,
     type IndicatorCalculationInput,
+    type IndicatorCalculationWithMipMapInput,
 } from "./indicator-calculation.ts";
 
 // =============================================================================
@@ -105,13 +154,10 @@ export {
 export {
     executeResampling,
     createResamplingInput,
-    validateResamplingResult,
-    getResampledSignalAtBar,
-    getTimestampForBar,
-    formatResamplingDebugInfo,
     type ResamplingResult,
     type ResamplingInput,
     type ResamplingStats,
+    type ResampledSignalCache,
 } from "./resampling.ts";
 
 // =============================================================================
@@ -120,10 +166,6 @@ export {
 export {
     executeInitialization,
     buildIndicatorInfoMap,
-    getIndicatorKeys,
-    getIndicatorsForCondition,
-    getRequiredIndicatorCount,
-    validateInitializationResult,
     type InitializationResult,
     type InitializationInput,
 } from "./initialization.ts";
@@ -134,18 +176,6 @@ export {
 export type { SimulationResult, EquityPoint } from "../../output/types.ts";
 
 // =============================================================================
-// STAGE 5 (ALTERNATIVE): INTERFACE-BASED SIMULATION
-// Uses AlgoRunner with dependency injection for backtest/live parity
-// =============================================================================
-export {
-    AlgoRunner,
-    runBacktestWithAlgoRunner,
-    type AlgoRunnerConfig,
-    type BarResult,
-    type AlgoRunnerBacktestResult,
-} from "../algo-runner.ts";
-
-// =============================================================================
 // STAGE 6: OUTPUT GENERATION
 // =============================================================================
 export {
@@ -154,8 +184,6 @@ export {
     createEmptyBacktestOutput,
     createEmptySwapMetrics,
     createEmptyAlgoMetrics,
-    validateBacktestOutput,
-    formatOutputSummary,
     type OutputGenerationInput,
     type CalculatedMetrics,
 } from "./output.ts";
@@ -169,26 +197,52 @@ import type { BacktestInput } from "../../core/config.ts";
 import type { BacktestOutput } from "../../events/types.ts";
 
 import { executeDataLoading } from "./data-loading.ts";
-import { executeIndicatorCalculation, createIndicatorInputFromDataResult } from "./indicator-calculation.ts";
+import { executeMipMapBuilding, createMipMapInputFromDataResult } from "./mipmap-building.ts";
+import { executeSubBarLoading } from "./subbar-loading.ts";
+import {
+    executeValueFactorLoading,
+    createStopLossFactorLookup,
+    createTakeProfitFactorLookup,
+} from "./valuefactor-loading.ts";
+import { executeIndicatorCalculationWithMipMap } from "./indicator-calculation.ts";
 import { executeResampling, createResamplingInput } from "./resampling.ts";
 import { executeInitialization } from "./initialization.ts";
 import { executeOutputGeneration, createEmptyBacktestOutput } from "./output.ts";
 import { type SimulationResult, type EquityPoint } from "../../output/types.ts";
 
-// Interface-based imports for DI pipeline
-import { runBacktestWithAlgoRunner, type AlgoRunnerConfig } from "../algo-runner.ts";
-import { createBacktestEnvironment } from "../../factory/backtest-factory.ts";
+// Import for pre-warming calculation
+import { getWarmupSeconds, collectIndicatorConfigs } from "../../indicators/calculator.ts";
+
+// Sub-bar provider for synthetic sub-bar generation
+import { FakeSubBarProvider } from "../fakes/fake-subbar-provider.ts";
+
+// Event-driven simulation imports
+import {
+    mergeIntoHeap,
+    extractSimulationEvents,
+    runEventDrivenSimulation,
+    type EventSimulatorConfig,
+} from "../event-driven/index.ts";
 
 /**
- * Run the complete backtest pipeline using Dependency Injection.
+ * Run the complete backtest pipeline using Event-Driven Simulation.
  *
- * This function orchestrates all 6 stages using the DI pattern:
- * - Stage 5 uses AlgoRunner with injected IExecutor, IDatabase, IIndicatorFeed
- * - This ensures the same code can run in live trading by swapping implementations
+ * This function uses heap-based event processing for high performance:
+ * - ~400x fewer iterations (processes ~1,000 events vs ~400,000 bars)
+ * - Pre-calculates signal crossing times from boolean arrays
+ * - Uses priority heap sorted by timestamp for O(log n) event processing
+ * - Unified state machine with centralized switch statement
  *
  * @architecture
- * The algo class should have NO conditional logic like
- * 'if is_backtesting: do X else do Y'.
+ * Stage 1: Data Loading - validate config, filter candles to time range
+ * Stage 1.1: MIP-Map Building - multi-resolution candle aggregation
+ * Stage 1.5: Sub-Bar Loading - fetch lower-timeframe candles for SL/TP
+ * Stage 1.6: ValueFactor Pre-Calculation - dynamic SL/TP indicators
+ * Stage 2: Indicator Pre-Calculation - calculate all indicators
+ * Stage 3: Resampling - align signals to simulation timeframe
+ * Stage 4: Initialization - set up state and event extraction
+ * Stage 5: Event-Driven Simulation - heap-based state machine
+ * Stage 6: Output Generation - calculate metrics
  *
  * @param candles - Historical price data
  * @param input - Backtest input configuration
@@ -196,42 +250,99 @@ import { createBacktestEnvironment } from "../../factory/backtest-factory.ts";
  *
  * @example
  * ```typescript
- * const output = await runBacktestPipeline(candles, input);
+ * const output = runBacktestPipeline(candles, input);
  * console.log(`Total P&L: $${output.swapMetrics.totalPnlUSD}`);
  * ```
  *
  * @audit-trail
- * - Created: 2026-01-01 (Sprint 2: Modularize Architecture)
- * - Updated: 2026-01-02 (Phase 6 Integration: Now uses DI infrastructure)
- * - This is the main entry point that uses BacktestEnvironment + AlgoRunner
+ * - Created: 2026-01-09 (Event-Driven Simulation Implementation)
+ * - Updated: 2026-01-09 (Bar-by-bar removal - now the only pipeline)
  */
-export async function runBacktestPipeline(candles: Candle[], input: BacktestInput): Promise<BacktestOutput> {
+export function runBacktestPipeline(candles: Candle[], input: BacktestInput): BacktestOutput {
     const startTimeMs = Date.now();
 
-    // Stage 1: Data Loading
-    const dataResult = executeDataLoading(candles, input);
+    // =========================================================================
+    // PRE-STAGE: CALCULATE WARMUP FOR PRE-WARMING
+    // =========================================================================
+    // Calculate how many seconds of data we need before the start time
+    // so indicators are fully warmed up when trading begins.
+    const indicatorConfigs = collectIndicatorConfigs(input.algoConfig.params);
+    const warmupSeconds = getWarmupSeconds(indicatorConfigs);
+
+    // =========================================================================
+    // STAGE 1: DATA LOADING (WITH PRE-WARMING)
+    // =========================================================================
+    // Pass warmupSeconds to load extra bars before startTime for indicator warmup.
+    // dataResult.tradingStartIndex tells us where actual trading should begin.
+    const dataResult = executeDataLoading(candles, input, warmupSeconds);
 
     // Early exit if no data
     if (dataResult.isEmpty) {
         return createEmptyBacktestOutput(dataResult.validatedInput, startTimeMs);
     }
 
-    // Stage 2: Indicator Pre-Calculation
-    const indicatorInput = createIndicatorInputFromDataResult(dataResult);
-    const indicatorResult = executeIndicatorCalculation(indicatorInput);
+    // =========================================================================
+    // STAGE 1.5: SUB-BAR LOADING
+    // =========================================================================
+    const subBarProvider = new FakeSubBarProvider();
+    subBarProvider.preloadParentCandles(dataResult.filteredCandles);
 
-    // Stage 3: Resampling
+    const parentTimeframe = detectParentTimeframe(input) ?? "5m";
+
+    const subBarResult = executeSubBarLoading({
+        filteredCandles: dataResult.filteredCandles,
+        symbol: input.runSettings.coinSymbol,
+        parentTimeframe,
+        subBarProvider,
+    });
+
+    // =========================================================================
+    // STAGE 1.6: VALUEFACTOR PRE-CALCULATION
+    // =========================================================================
+    const valueFactorResult = executeValueFactorLoading({
+        algoParams: input.algoConfig.params,
+        subBarResult,
+        parentTimeframe,
+    });
+
+    const slValueFactorLookup = createStopLossFactorLookup(valueFactorResult);
+    const tpValueFactorLookup = createTakeProfitFactorLookup(valueFactorResult);
+
+    // =========================================================================
+    // STAGE 1.1: MIP-MAP BUILDING
+    // =========================================================================
+    const mipMapInput = createMipMapInputFromDataResult(dataResult);
+    const mipMapResult = executeMipMapBuilding(mipMapInput);
+
+    // =========================================================================
+    // STAGE 2: INDICATOR PRE-CALCULATION
+    // =========================================================================
+    const indicatorResult = executeIndicatorCalculationWithMipMap({
+        mipMapResult,
+        algoParams: input.algoConfig.params,
+    });
+
+    // =========================================================================
+    // STAGE 3: RESAMPLING
+    // =========================================================================
     const resamplingInput = createResamplingInput(dataResult.filteredCandles, indicatorResult);
     const resamplingResult = executeResampling(resamplingInput);
 
-    // Stage 4: Initialization
+    // =========================================================================
+    // STAGE 4: INITIALIZATION
+    // =========================================================================
     const initResult = executeInitialization({
         dataResult,
         resamplingResult,
     });
 
-    // Stage 5: Simulation using Dependency Injection (PHASE 6 INTEGRATION)
-    // Convert ResampledSignalCache to SignalCache format for BacktestEnvironment
+    // =========================================================================
+    // STAGE 4.5: EVENT EXTRACTION (NEW - Event-Driven)
+    // =========================================================================
+    // Extract timestamps from candles
+    const timestamps = dataResult.filteredCandles.map((c) => c.bucket);
+
+    // Convert resampled signals to signal cache
     const signalCacheMap = new Map<string, boolean[]>();
     for (const key of resamplingResult.resampledSignals.keys()) {
         const signals = resamplingResult.resampledSignals.get(key);
@@ -240,167 +351,123 @@ export async function runBacktestPipeline(candles: Candle[], input: BacktestInpu
         }
     }
 
-    // Convert IndicatorInfo from collector format to interface format
-    // IMPORTANT: Use info.indicatorKey as map key (matches signalCache keys), not the composite key
-    const indicatorInfoForFeed = new Map<string, import("../../interfaces/indicator-feed.ts").IndicatorInfo>();
-    for (const [_key, info] of initResult.indicatorInfoMap) {
-        indicatorInfoForFeed.set(info.indicatorKey, {
-            key: info.indicatorKey,
-            type: info.indicatorType,
+    // Convert IndicatorInfo format for event extraction
+    const indicatorInfoMapForExtraction = new Map<
+        string,
+        {
+            indicatorKey: string;
+            indicatorType: string;
+            conditionType: import("../../events/types.ts").ConditionType;
+            isRequired: boolean;
+        }
+    >();
+    for (const [key, info] of initResult.indicatorInfoMap) {
+        indicatorInfoMapForExtraction.set(key, {
+            indicatorKey: info.indicatorKey,
+            indicatorType: info.indicatorType,
             conditionType: info.conditionType,
             isRequired: info.isRequired,
         });
     }
 
-    // Create BacktestEnvironment with fake implementations
-    // This is where DI happens - AlgoRunner receives interfaces, not concrete classes
-    const env = createBacktestEnvironment({
-        algoConfig: input.algoConfig,
-        candles: dataResult.filteredCandles,
-        signalCache: signalCacheMap,
-        indicatorInfoMap: indicatorInfoForFeed,
-        feeBps: initResult.feeBps,
-        slippageBps: initResult.slippageBps,
-    });
+    // Calculate where trading should start in simulation bar space.
+    // With pre-warming: tradingStartIndex marks where the user's requested date range begins.
+    // Before tradingStartIndex, bars are used only for indicator warmup.
+    // The tradingStartBar should be based on tradingStartIndex, not warmupBars.
+    const tradingStartBar = dataResult.tradingStartIndex;
 
-    // Configure AlgoRunner
-    const algoConfig: AlgoRunnerConfig = {
-        algoParams: initResult.algoParams,
-        symbol: initResult.symbol,
-        tradesLimit: initResult.tradesLimit,
-        warmupBars: resamplingResult.warmupBars,
-    };
-
-    // Run simulation using AlgoRunner with injected interfaces
-    // This is the SAME code that would run in live trading!
-    const algoResult = await runBacktestWithAlgoRunner(
-        env.executor,
-        env.database,
-        env.indicatorFeed,
-        dataResult.filteredCandles,
-        algoConfig,
-        initResult.closePositionOnExit
+    // Extract all simulation events from pre-calculated signals
+    // Pass tradingStartBar to skip pre-warming bars and start trading at the user's requested date
+    const extractionResult = extractSimulationEvents(
+        signalCacheMap,
+        indicatorInfoMapForExtraction,
+        timestamps,
+        tradingStartBar
     );
 
-    // Extract events from FakeDatabase and FakeExecutor
-    // AlgoEvents are logged to the database by AlgoRunner
-    const algoEvents = await env.database.getAlgoEvents();
-    // SwapEvents are created by FakeExecutor during order execution (not stored in database)
-    // We need to cast to access the backtest-specific getSwapEvents() method
-    const swapEvents = (env.executor as import("../fakes/fake-executor.ts").FakeExecutor).getSwapEvents();
+    // Build event heap by merging all event types
+    const heap = mergeIntoHeap(
+        extractionResult.signalCrossingEvents,
+        extractionResult.conditionMetEvents,
+        extractionResult.conditionUnmetEvents
+    );
 
-    // Build TradeEvents from SwapEvents (pair entry/exit)
-    const trades = buildTradeEventsFromSwaps(swapEvents, initResult.symbol);
+    // =========================================================================
+    // STAGE 5: EVENT-DRIVEN SIMULATION
+    // =========================================================================
+    const simulatorConfig: EventSimulatorConfig = {
+        algoParams: initResult.algoParams,
+        initialCapital: initResult.initialCapital,
+        symbol: initResult.symbol,
+        feeBps: initResult.feeBps,
+        slippageBps: initResult.slippageBps,
+        closePositionOnExit: initResult.closePositionOnExit,
+        barDurationSeconds: resamplingResult.simulationResolution,
+        tradesLimit: initResult.tradesLimit,
+        subBarCandlesMap: subBarResult.isSupported ? subBarResult.subBarCandlesMap : undefined,
+        slValueFactorLookup: valueFactorResult.hasDynamicExits ? slValueFactorLookup : undefined,
+        tpValueFactorLookup: valueFactorResult.hasDynamicExits ? tpValueFactorLookup : undefined,
+    };
 
-    // Build equity curve from AlgoRunner bar results
-    const equityCurve: EquityPoint[] = buildEquityCurve(algoResult.barResults, initResult.initialCapital);
+    const eventSimResult = runEventDrivenSimulation(heap, dataResult.filteredCandles, simulatorConfig);
+
+    // Convert event-simulator EquityPoint to output EquityPoint format
+    const equityCurve: EquityPoint[] = eventSimResult.equityCurve.map((ep) => ({
+        time: ep.timestamp,
+        timestamp: ep.timestamp,
+        barIndex: ep.barIndex,
+        equity: ep.equity,
+        drawdownPct: ep.drawdownPct,
+        runupPct: 0, // Event-driven simulator doesn't track runup yet
+    }));
 
     // Build SimulationResult for Stage 6
     const simResult: SimulationResult = {
-        algoEvents,
-        swapEvents,
-        trades,
+        algoEvents: [], // Event-driven doesn't generate AlgoEvents yet
+        swapEvents: eventSimResult.swapEvents,
+        trades: eventSimResult.trades,
         equityCurve,
     };
 
-    // Stage 6: Output Generation
+    // =========================================================================
+    // STAGE 6: OUTPUT GENERATION
+    // =========================================================================
+    // Only count the trading period bars, not the pre-warming bars
+    const tradingBarsCount = dataResult.filteredCandles.length - dataResult.tradingStartIndex;
+
     return executeOutputGeneration({
         simulationResult: simResult,
         dataResult,
-        totalBarsProcessed: dataResult.filteredCandles.length,
+        totalBarsProcessed: tradingBarsCount,
         startTimeMs,
     });
 }
 
 /**
- * Build TradeEvents from paired SwapEvents.
- * Uses isEntry and tradeDirection fields for correct pairing (handles both LONG and SHORT).
- * Falls back to old logic (USD → Asset = entry) if fields are not set.
+ * Detect parent timeframe from backtest input.
+ * Extracts from first indicator config or returns null if not found.
  */
-function buildTradeEventsFromSwaps(
-    swapEvents: import("../../events/types.ts").SwapEvent[],
-    symbol: string
-): import("../../events/types.ts").TradeEvent[] {
-    const trades: import("../../events/types.ts").TradeEvent[] = [];
-    let currentEntrySwap: import("../../events/types.ts").SwapEvent | null = null;
-    let tradeId = 1;
+function detectParentTimeframe(input: BacktestInput): string | null {
+    const algoParams = input.algoConfig.params;
 
-    for (const swap of swapEvents) {
-        // Use isEntry field if available, otherwise fall back to fromAsset check
-        const isEntry = swap.isEntry ?? swap.fromAsset === "USD";
+    // Check entry/exit conditions for timeframe
+    const conditions = [
+        algoParams.longEntry,
+        algoParams.longExit,
+        algoParams.shortEntry,
+        algoParams.shortExit,
+    ];
 
-        if (isEntry) {
-            // Entry swap
-            currentEntrySwap = swap;
-        } else if (currentEntrySwap) {
-            // Exit swap - pair with current entry
-            const direction = swap.tradeDirection ?? (swap.fromAsset === symbol ? "LONG" : "SHORT");
-
-            // P&L calculation depends on direction:
-            // LONG: Entry spends USD to buy asset, Exit sells asset for USD
-            //       P&L = exitUSD - entryUSD
-            // SHORT: Entry sells asset for USD, Exit spends USD to buy back asset
-            //       P&L = entryUSD - exitUSD
-            let pnlUSD: number;
-            let entryUSD: number;
-
-            if (direction === "LONG") {
-                // Entry: USD → Asset (fromAmount is USD spent)
-                // Exit: Asset → USD (toAmount is USD received)
-                entryUSD = currentEntrySwap.fromAmount;
-                pnlUSD = swap.toAmount - entryUSD;
-            } else {
-                // SHORT - Entry: Asset → USD (toAmount is USD received)
-                // SHORT - Exit: USD → Asset (fromAmount is USD spent)
-                entryUSD = currentEntrySwap.toAmount;
-                pnlUSD = entryUSD - swap.fromAmount;
+    for (const condition of conditions) {
+        if (!condition) continue;
+        for (const indicator of [...condition.required, ...condition.optional]) {
+            // Check params for timeframe property
+            const params = indicator.params as Record<string, unknown>;
+            if (params && typeof params["timeframe"] === "string") {
+                return params["timeframe"];
             }
-
-            const pnlPct = pnlUSD / entryUSD;
-            const durationBars = swap.barIndex - currentEntrySwap.barIndex;
-            const durationSeconds = swap.timestamp - currentEntrySwap.timestamp;
-
-            trades.push({
-                tradeId: tradeId++,
-                direction,
-                entrySwap: currentEntrySwap,
-                exitSwap: swap,
-                pnlUSD,
-                pnlPct,
-                durationBars,
-                durationSeconds,
-            });
-
-            currentEntrySwap = null;
         }
     }
 
-    return trades;
-}
-
-/**
- * Build equity curve from AlgoRunner bar results.
- */
-function buildEquityCurve(barResults: import("../algo-runner.ts").BarResult[], initialCapital: number): EquityPoint[] {
-    if (barResults.length === 0) {
-        return [];
-    }
-
-    let maxEquity = initialCapital;
-    const equityCurve: EquityPoint[] = [];
-
-    for (const result of barResults) {
-        const equity = result.equity;
-        maxEquity = Math.max(maxEquity, equity);
-        const drawdownPct = maxEquity > 0 ? (maxEquity - equity) / maxEquity : 0;
-
-        equityCurve.push({
-            timestamp: result.timestamp,
-            barIndex: result.barIndex,
-            equity,
-            drawdownPct,
-        });
-    }
-
-    return equityCurve;
+    return null;
 }

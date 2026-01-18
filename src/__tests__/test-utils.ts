@@ -113,7 +113,15 @@ export function createSidewaysCandles(count: number, startPrice: number = 10000)
  */
 export function createMockEntryCondition(overrides: Partial<EntryCondition> = {}): EntryCondition {
     return {
-        required: [{ type: "RSI", params: { length: 14, threshold: 30, direction: "ABOVE" } }],
+        required: [{
+            type: "RSI",
+            params: {
+                firstPeriod: 14 * 3600, // 14 hours in seconds
+                source: "1_close" as const,
+                signal: "value_below_threshold" as const,
+                threshold: 30,
+            }
+        }],
         optional: [],
         ...overrides,
     };
@@ -124,7 +132,15 @@ export function createMockEntryCondition(overrides: Partial<EntryCondition> = {}
  */
 export function createMockExitCondition(overrides: Partial<ExitCondition> = {}): ExitCondition {
     return {
-        required: [{ type: "RSI", params: { length: 14, threshold: 70, direction: "BELOW" } }],
+        required: [{
+            type: "RSI",
+            params: {
+                firstPeriod: 14 * 3600, // 14 hours in seconds
+                source: "1_close" as const,
+                signal: "value_above_threshold" as const,
+                threshold: 70,
+            }
+        }],
         optional: [],
         ...overrides,
     };

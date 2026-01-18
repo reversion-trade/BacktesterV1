@@ -19,13 +19,13 @@ import type { Direction, ValueConfig } from "../../core/types.ts";
 // =============================================================================
 
 /**
- * Base schema for value configuration (ABS, REL, or DYN).
+ * Runtime schema for value configuration (ABS, REL, or DYN).
+ * Simpler than the input schema in config.ts - no valueFactor field since
+ * special indicators receive pre-computed modulation factors.
  */
-export const ValueConfigSchema = z.object({
+export const RuntimeValueSchema = z.object({
     type: z.enum(["ABS", "REL", "DYN"]).describe("Absolute USD, relative percentage, or dynamic indicator-based"),
     value: z.number().positive().describe("The value (USD for ABS, decimal for REL/DYN base)"),
-    // Note: valueFactor indicator config is validated at the config level, not here
-    // since special indicators receive the computed modulation factor, not the raw config
     inverted: z.boolean().optional().describe("Whether to invert the indicator modulation"),
 });
 
@@ -39,7 +39,7 @@ export const DirectionSchema = z.enum(["LONG", "SHORT"]).describe("Trade directi
  */
 export const StopLossConfigSchema = z.object({
     direction: DirectionSchema,
-    stopLoss: ValueConfigSchema.describe("Stop loss offset from entry"),
+    stopLoss: RuntimeValueSchema.describe("Stop loss offset from entry"),
 });
 
 /**
@@ -47,7 +47,7 @@ export const StopLossConfigSchema = z.object({
  */
 export const TakeProfitConfigSchema = z.object({
     direction: DirectionSchema,
-    takeProfit: ValueConfigSchema.describe("Take profit offset from entry"),
+    takeProfit: RuntimeValueSchema.describe("Take profit offset from entry"),
 });
 
 /**
@@ -55,7 +55,7 @@ export const TakeProfitConfigSchema = z.object({
  */
 export const TrailingStopConfigSchema = z.object({
     direction: DirectionSchema,
-    trailingOffset: ValueConfigSchema.describe("Trailing offset from extreme price"),
+    trailingOffset: RuntimeValueSchema.describe("Trailing offset from extreme price"),
 });
 
 /**
@@ -64,7 +64,7 @@ export const TrailingStopConfigSchema = z.object({
 export const BalanceConfigSchema = z.object({
     direction: DirectionSchema,
     initialCapital: z.number().positive().describe("Starting capital in USD"),
-    positionSize: ValueConfigSchema.describe("Position size (ABS USD or REL fraction)"),
+    positionSize: RuntimeValueSchema.describe("Position size (ABS USD or REL fraction)"),
     feeBps: z.number().min(0).max(1000).describe("Trading fee in basis points"),
     slippageBps: z.number().min(0).max(1000).describe("Slippage in basis points"),
 });
@@ -318,6 +318,45 @@ export abstract class BaseSpecialIndicator<TConfig extends BaseSpecialIndicatorC
      */
     public getDynamicFactor(): number {
         return this.dynamicFactor;
+    }
+
+    /**
+     * Update the dynamic modulation factor mid-position.
+     *
+     * Used for sub-bar SL/TP recalculation where the valueFactor indicator
+     * is updated at each checkpoint. Triggers level recalculation.
+     *
+     * @param newFactor - New modulation factor (0-100 range, will be normalized to 0-1)
+     *
+     * @example
+     * ```typescript
+     * // At each sub-bar checkpoint, update SL with new ATR-based factor:
+     * const currentFactor = getValueFactorAtTimestamp(checkpoint.timestamp);
+     * if (currentFactor !== undefined) {
+     *   stopLoss.updateDynamicFactor(currentFactor);
+     * }
+     * // SL level is now recalculated with new factor
+     * ```
+     */
+    public updateDynamicFactor(newFactor: number): void {
+        // Normalize from 0-100 to 0-1
+        this.dynamicFactor = newFactor / 100;
+
+        // Trigger level recalculation in subclasses
+        this.onDynamicFactorUpdate();
+    }
+
+    /**
+     * Hook for subclass-specific logic when dynamicFactor is updated mid-position.
+     * Called after dynamicFactor is set in updateDynamicFactor().
+     *
+     * Subclasses (StopLoss, TakeProfit) should override this to recalculate
+     * their trigger levels based on the new factor.
+     *
+     * @protected
+     */
+    protected onDynamicFactorUpdate(): void {
+        // Default: no-op. Subclasses override to recalculate levels.
     }
 }
 

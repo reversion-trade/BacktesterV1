@@ -1,26 +1,10 @@
 import { z } from "zod";
 import { DEFAULT_FEE_BPS, DEFAULT_SLIPPAGE_BPS } from "./constants.ts";
-import type {
-    AlgoParams,
-    AlgoConfig,
-    RunSettings,
-    ValueConfig,
-    LadderParams,
-    EntryCondition,
-    ExitCondition,
-    TimeoutConfig,
-} from "./types.ts";
+import type { RunSettings } from "./types.ts";
 
 export type { RunSettings };
 
 // ZOD SCHEMAS
-// Schema for LadderParams validation
-export const LadderParamsSchema = z.object({
-    levels: z.record(z.string(), z.number()),
-    direction: z.enum(["UP", "DOWN", "CENTER"]),
-    method: z.enum(["CLAMP", "SCALE"]),
-    normalize: z.boolean(),
-});
 
 //Schema for ValueConfig validation
 export const ValueConfigSchema = z
@@ -29,7 +13,6 @@ export const ValueConfigSchema = z
         value: z.number(),
         valueFactor: z.custom<import("@indicators/factory.ts").IndicatorConfig>().optional(),
         inverted: z.boolean().optional(),
-        ladder: LadderParamsSchema.optional(),
     })
     .refine(
         (data) => {

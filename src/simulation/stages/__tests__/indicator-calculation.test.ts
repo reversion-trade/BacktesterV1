@@ -10,11 +10,10 @@ import { describe, it, expect } from "bun:test";
 import {
     executeIndicatorCalculation,
     createIndicatorInputFromDataResult,
-    validateIndicatorResult,
-    getSignalAtBar,
     type IndicatorCalculationResult,
     type IndicatorCalculationInput,
 } from "../indicator-calculation.ts";
+import { validateIndicatorResult, getSignalAtBar } from "./test-utils.ts";
 import type { Candle, AlgoParams } from "../../../core/types.ts";
 import type { SignalCache } from "../../../indicators/calculator.ts";
 import type { DataLoadingResult } from "../data-loading.ts";
@@ -110,6 +109,8 @@ function createMockDataLoadingResult(): DataLoadingResult {
         actualEndTime: 1120,
         initialCapital: 10000,
         isEmpty: false,
+        tradingStartIndex: 0,
+        actualPreWarmingSeconds: 0,
     };
 }
 

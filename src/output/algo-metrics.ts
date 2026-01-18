@@ -154,7 +154,8 @@ function calculateDurationStats(
     const falseDurations: number[] = [];
 
     let lastFlipBar = 0;
-    let lastValue = false; // Assume starts false
+    // Use first flip's previousValue to determine initial state
+    let lastValue = sortedFlips[0]!.previousValue;
 
     for (const flip of sortedFlips) {
         const duration = flip.barIndex - lastFlipBar;

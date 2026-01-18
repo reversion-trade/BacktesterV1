@@ -16,17 +16,9 @@ import { mean, stddevPopulation } from "./math.ts";
 // CONSTANTS
 // =============================================================================
 
-/**
- * Trading days per year for annualization.
- * Crypto markets trade 24/7, so we use 365 days.
- * (Traditional markets use 252 trading days)
- */
 export const TRADING_DAYS_PER_YEAR = 365;
 
-/**
- * Default annual risk-free rate.
- * Set to 0 to match TradingView's default behavior.
- */
+//risk free rate for sharpe ratio
 export const DEFAULT_RISK_FREE_RATE = 0;
 
 /**
