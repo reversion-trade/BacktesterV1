@@ -7,3 +7,9 @@ dist/
 .env
 .env.*
 bun.lockb
+
+# PyCharm
+.idea/
+
+# Bun
+bun.lock
