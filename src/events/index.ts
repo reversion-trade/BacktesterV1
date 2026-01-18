@@ -1,8 +1,4 @@
-/**
- * Events Module
- *
- * Exports event types and the EventCollector for use in simulation.
- */
+//Exports event types and the EventCollector for use in simulation.
 
 // Types
 export type {

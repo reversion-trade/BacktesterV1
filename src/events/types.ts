@@ -1,320 +1,136 @@
 /**
- * Event Types for Backtester-v2
- *
- * Two distinct event categories:
- * 1. SwapEvents - Pure wallet conversions (dumb events, no algo knowledge)
- * 2. AlgoEvents - Internal algorithm state changes (indicator flips, conditions, transitions)
- *
- * This separation enables:
- * - Clear metrics categorization (swap-based vs algo-based)
- * - Diagnostic insights for algo tuning
- * - Near-miss analysis for entry conditions
+ * Event Types - SwapEvents (wallet conversions) and AlgoEvents (internal state changes).
+ * Enables clear metrics categorization, diagnostic insights, and near-miss analysis.
  */
 
 import type { Direction, PositionState } from "../core/types.ts";
 
-// =============================================================================
 // COMMON TYPES
-// =============================================================================
-
-/**
- * Which condition an event relates to
- */
 export type ConditionType = "LONG_ENTRY" | "LONG_EXIT" | "SHORT_ENTRY" | "SHORT_EXIT";
+export type TransitionReason = "ENTRY_SIGNAL" | "EXIT_SIGNAL" | "STOP_LOSS" | "TAKE_PROFIT" | "TRAILING_STOP" | "END_OF_BACKTEST";
 
-/**
- * Why a state transition occurred
- */
-export type TransitionReason =
-    | "ENTRY_SIGNAL"
-    | "EXIT_SIGNAL"
-    | "STOP_LOSS"
-    | "TAKE_PROFIT"
-    | "TRAILING_STOP"
-    | "END_OF_BACKTEST";
-
-// =============================================================================
-// SWAP EVENTS (Wallet Conversions)
-// =============================================================================
-
-/**
- * A pure wallet conversion event.
- * "Dumb event" - no algo logic knowledge required.
- *
- * Examples:
- * - Entry: USD → BTC (buying)
- * - Exit: BTC → USD (selling)
- */
+// SWAP EVENTS - Pure wallet conversions (USD → BTC or BTC → USD)
 export interface SwapEvent {
-    /** Unique identifier for this swap */
     id: string;
-    /** Unix timestamp (seconds) */
-    timestamp: number;
-    /** Candle index in the dataset */
-    barIndex: number;
-    /** Asset leaving the wallet (e.g., "USD", "BTC") */
-    fromAsset: string;
-    /** Asset entering the wallet */
-    toAsset: string;
-    /** Amount of fromAsset */
+    timestamp: number;               // Unix timestamp (seconds)
+    barIndex: number;                // Candle index in dataset
+    fromAsset: string;               // Asset leaving wallet (e.g., "USD", "BTC")
+    toAsset: string;                 // Asset entering wallet
     fromAmount: number;
-    /** Amount of toAsset received */
     toAmount: number;
-    /** Execution price */
-    price: number;
-    /** Fee paid in USD */
+    price: number;                   // Execution price
     feeUSD: number;
-    /** Slippage incurred in USD */
     slippageUSD: number;
-    /** Whether this swap is opening a position (entry) or closing (exit) */
-    isEntry?: boolean;
-    /** Direction of the trade this swap belongs to (LONG or SHORT) */
+    isEntry?: boolean;               // Opening (entry) or closing (exit) position
     tradeDirection?: Direction;
 }
 
-/**
- * A complete trade consisting of entry and exit swaps.
- * Derived from paired SwapEvents.
- */
+// TRADE EVENT - Complete trade (entry + exit swaps paired)
 export interface TradeEvent {
-    /** Sequential trade ID */
     tradeId: number;
-    /** Trade direction */
     direction: Direction;
-    /** Entry swap (USD → Asset) */
-    entrySwap: SwapEvent;
-    /** Exit swap (Asset → USD) */
-    exitSwap: SwapEvent;
-    /** Net profit/loss in USD (after fees) */
-    pnlUSD: number;
-    /** Profit/loss as percentage of entry value */
-    pnlPct: number;
-    /** Number of candles the trade was open */
+    entrySwap: SwapEvent;            // USD → Asset
+    exitSwap: SwapEvent;             // Asset → USD
+    pnlUSD: number;                  // Net profit/loss after fees
+    pnlPct: number;                  // P&L as percentage of entry
     durationBars: number;
-    /** Duration in seconds */
     durationSeconds: number;
 }
 
-// =============================================================================
-// CONDITION SNAPSHOT
-// =============================================================================
-
-/**
- * Snapshot of a condition's state at a point in time.
- * Used to track "how close" we were to triggering.
- */
+// CONDITION SNAPSHOT - State at a point in time, tracks "how close" to triggering
 export interface ConditionSnapshot {
-    /** Number of required indicators currently true */
-    requiredTrue: number;
-    /** Total number of required indicators */
+    requiredTrue: number;            // Required indicators currently true
     requiredTotal: number;
-    /** Number of optional indicators currently true */
-    optionalTrue: number;
-    /** Total number of optional indicators */
+    optionalTrue: number;            // Optional indicators currently true
     optionalTotal: number;
-    /** Whether the full condition is met (all required + at least 1 optional if any) */
-    conditionMet: boolean;
-    /**
-     * Distance from triggering:
-     * - 0 = condition is met
-     * - 1 = one more indicator needs to flip
-     * - N = N more indicators needed
-     */
-    distanceFromTrigger: number;
+    conditionMet: boolean;           // All required + at least 1 optional (if any)
+    distanceFromTrigger: number;     // 0=met, N=N more indicators needed
 }
 
-// =============================================================================
-// ALGO EVENTS (Internal State Changes)
-// =============================================================================
-
-/**
- * Base fields shared by all algo events
- */
+// ALGO EVENTS - Internal state changes
 interface AlgoEventBase {
-    /** Unix timestamp (seconds) */
     timestamp: number;
-    /** Candle index in the dataset */
     barIndex: number;
 }
 
-/**
- * An individual indicator changed its signal state.
- * This is the most granular algo event.
- */
 export interface IndicatorFlipEvent extends AlgoEventBase {
     type: "INDICATOR_FLIP";
-    /** Unique cache key identifying this indicator + params */
-    indicatorKey: string;
-    /** Indicator type name (e.g., "RSI", "MACD") */
-    indicatorType: string;
-    /** Previous signal value */
+    indicatorKey: string;            // Cache key (e.g., "RSI:14:close:60")
+    indicatorType: string;           // e.g., "RSI", "MACD"
     previousValue: boolean;
-    /** New signal value */
     newValue: boolean;
-    /** Which condition this indicator belongs to */
     conditionType: ConditionType;
-    /** Whether this is a required or optional indicator */
     isRequired: boolean;
-    /** Condition state AFTER this flip */
-    conditionSnapshot: ConditionSnapshot;
+    conditionSnapshot: ConditionSnapshot; // State AFTER this flip
 }
 
-/**
- * A full entry/exit condition changed state.
- * Emitted when condition goes from met→unmet or unmet→met.
- */
 export interface ConditionChangeEvent extends AlgoEventBase {
     type: "CONDITION_CHANGE";
-    /** Which condition changed */
     conditionType: ConditionType;
-    /** Previous condition state */
     previousState: boolean;
-    /** New condition state */
     newState: boolean;
-    /** Which indicator flip caused this change (if applicable) */
-    triggeringIndicatorKey?: string;
-    /** Full condition snapshot */
+    triggeringIndicatorKey?: string; // Which indicator caused this change
     snapshot: ConditionSnapshot;
 }
 
-/**
- * Position state machine transition.
- * CASH → LONG, LONG → TIMEOUT → CASH, etc.
- */
 export interface StateTransitionEvent extends AlgoEventBase {
     type: "STATE_TRANSITION";
-    /** Previous position state */
     fromState: PositionState;
-    /** New position state */
     toState: PositionState;
-    /** What caused this transition */
     reason: TransitionReason;
-    /** Associated trade ID (if entering/exiting a position) */
     tradeId?: number;
 }
 
-/**
- * Special indicator (SL/TP/Trailing) events.
- */
 export interface SpecialIndicatorEvent extends AlgoEventBase {
     type: "SL_SET" | "TP_SET" | "TRAILING_SET" | "TRAILING_UPDATE" | "SL_HIT" | "TP_HIT" | "TRAILING_HIT";
-    /** Current price when event occurred */
-    price: number;
-    /** The SL/TP/Trailing level */
-    level: number;
-    /** Trade direction this applies to */
+    price: number;                   // Current price when event occurred
+    level: number;                   // SL/TP/Trailing level
     direction: Direction;
-    /** Associated trade ID */
     tradeId: number;
 }
 
-/**
- * Union of all algo event types
- */
 export type AlgoEvent = IndicatorFlipEvent | ConditionChangeEvent | StateTransitionEvent | SpecialIndicatorEvent;
 
-// =============================================================================
-// NEAR-MISS ANALYSIS
-// =============================================================================
-
-/**
- * An "approach sequence" - period where we got closer to triggering.
- * Useful for analyzing "almost traded" scenarios.
- */
+// NEAR-MISS ANALYSIS - Tracks "almost traded" scenarios
 export interface ApproachSequence {
-    /** Candle index when approach started */
     startBar: number;
-    /** Candle index when approach ended (retreated or triggered) */
     endBar: number;
-    /** Starting distance from trigger */
     startDistance: number;
-    /** Closest we got during this approach */
-    minDistance: number;
-    /** Did this approach result in a trigger? */
+    minDistance: number;             // Closest we got during approach
     triggered: boolean;
-    /** Which condition was being approached */
     conditionType: ConditionType;
 }
 
-/**
- * Analysis of near-miss patterns for a condition.
- */
 export interface NearMissAnalysis {
-    /** Which condition this analysis is for */
     conditionType: ConditionType;
-    /**
-     * Histogram of distance levels reached.
-     * Key = distance, Value = count of times reached.
-     * e.g., { 0: 5, 1: 23, 2: 45 } means triggered 5 times, got to 1-away 23 times, etc.
-     */
-    distanceHistogram: Record<number, number>;
-    /** Closest we got without actually triggering */
+    distanceHistogram: Record<number, number>; // distance → count of times reached
     closestApproachWithoutTrigger: number;
-    /** All approach sequences (getting closer then retreating or triggering) */
     approachSequences: ApproachSequence[];
-    /** Total times condition was evaluated */
     totalEvaluations: number;
-    /** Times condition fully triggered */
     triggerCount: number;
 }
 
-// =============================================================================
-// INDICATOR ANALYSIS
-// =============================================================================
-
-/**
- * Analysis of a single indicator's behavior.
- */
+// INDICATOR ANALYSIS - Per-indicator behavior metrics
 export interface IndicatorAnalysis {
-    /** Unique cache key for this indicator */
     indicatorKey: string;
-    /** Indicator type name */
     indicatorType: string;
-    /** Which condition this indicator belongs to */
     conditionType: ConditionType;
-    /** Whether it's required or optional */
     isRequired: boolean;
-    /** Total number of flips (true→false or false→true) */
-    flipCount: number;
-    /** Average duration when signal is true (in bars) */
+    flipCount: number;               // Total true↔false transitions
     avgDurationTrueBars: number;
-    /** Average duration when signal is false (in bars) */
     avgDurationFalseBars: number;
-    /** Percentage of time signal was true */
     pctTimeTrue: number;
-    /**
-     * How often this was the LAST indicator to flip true, triggering the condition.
-     * High = this indicator is often the deciding factor.
-     */
-    triggeringFlipCount: number;
-    /**
-     * How often this was FALSE when all other indicators were TRUE.
-     * High = this indicator is blocking entries.
-     */
-    blockingCount: number;
-    /**
-     * Usefulness score (0-100).
-     * Low score means: always true (useless), never flips (too strict), or never blocking.
-     */
-    usefulnessScore: number;
+    triggeringFlipCount: number;     // Times this was the deciding indicator
+    blockingCount: number;           // Times FALSE while all others TRUE
+    usefulnessScore: number;         // 0-100, low = always true/never flips
 }
 
-// =============================================================================
-// AGGREGATE METRICS TYPES
-// =============================================================================
-
-/**
- * Metrics derived from SwapEvents/TradeEvents.
- * Traditional trading performance metrics.
- */
+// SWAP METRICS - Traditional trading performance
 export interface SwapMetrics {
-    // Summary
     totalTrades: number;
     winningTrades: number;
     losingTrades: number;
     winRate: number;
-
-    // P&L
     totalPnlUSD: number;
     grossProfitUSD: number;
     grossLossUSD: number;
@@ -323,46 +139,30 @@ export interface SwapMetrics {
     avgLossUSD: number;
     largestWinUSD: number;
     largestLossUSD: number;
-
-    // Risk metrics
     profitFactor: number;
     sharpeRatio: number;
     sortinoRatio: number;
     maxDrawdownPct: number;
     maxDrawdownUSD: number;
     calmarRatio: number;
-
-    // By direction
     longTrades: number;
     shortTrades: number;
     longWinRate: number;
     shortWinRate: number;
     longPnlUSD: number;
     shortPnlUSD: number;
-
-    // Duration
     avgTradeDurationBars: number;
     avgTradeDurationSeconds: number;
     avgWinDurationBars: number;
     avgLossDurationBars: number;
-
-    // Fees
     totalFeesUSD: number;
     totalSlippageUSD: number;
 }
 
-/**
- * Metrics derived from AlgoEvents.
- * Diagnostic metrics for algo tuning.
- */
+// ALGO METRICS - Diagnostic metrics for algo tuning
 export interface AlgoMetrics {
-    /** Per-indicator analysis */
     indicatorAnalysis: IndicatorAnalysis[];
-
-    /** Near-miss analysis per condition */
     nearMissAnalysis: NearMissAnalysis[];
-
-    /** State distribution */
     stateDistribution: {
         pctTimeFlat: number;
         pctTimeLong: number;
@@ -371,8 +171,6 @@ export interface AlgoMetrics {
         avgTimeLongBars: number;
         avgTimeShortBars: number;
     };
-
-    /** Exit reason breakdown */
     exitReasonBreakdown: {
         signal: number;
         stopLoss: number;
@@ -380,11 +178,7 @@ export interface AlgoMetrics {
         trailingStop: number;
         endOfBacktest: number;
     };
-
-    /** Condition trigger counts */
     conditionTriggerCounts: Record<ConditionType, number>;
-
-    /** Total algo events by type */
     eventCounts: {
         indicatorFlips: number;
         conditionChanges: number;
@@ -393,15 +187,8 @@ export interface AlgoMetrics {
     };
 }
 
-// =============================================================================
-// BACKTEST RESULT STRUCTURE
-// =============================================================================
-
-/**
- * Complete backtest output with events and metrics.
- */
+// BACKTEST OUTPUT - Complete result with events and metrics
 export interface BacktestOutput {
-    // Configuration used
     config: {
         algoId: string;
         version: number;
@@ -412,28 +199,18 @@ export interface BacktestOutput {
         feeBps: number;
         slippageBps: number;
     };
-
-    // Raw events (stored for later analysis)
     events: {
         swapEvents: SwapEvent[];
         algoEvents: AlgoEvent[];
     };
-
-    // Derived trade records
     trades: TradeEvent[];
-
-    // Equity curve
     equityCurve: Array<{
         timestamp: number;
         equity: number;
         drawdownPct: number;
     }>;
-
-    // Metrics
     swapMetrics: SwapMetrics;
     algoMetrics: AlgoMetrics;
-
-    // Meta
     completedAt: number;
     durationMs: number;
     totalBarsProcessed: number;
